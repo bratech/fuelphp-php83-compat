@@ -11,6 +11,8 @@ The six PHP/database configurations below were rerun twice each against the fina
 
 The cumulative patch now changes 34 files across seven packages. Exported patches reproduced all 34 source hashes; actual apply, repeated apply, reverse, reapply and rejection of modified sources passed. Independent review identified buffer-loop progress, partial filtering cleanup and cleanup-error preservation issues; failing reproductions were added and the fixes passed on both PHP versions.
 
+Distribution tests also passed on both PHP versions: Project 38 cases, Transaction 18 cases, the CLI scenarios and Composer metadata validation. Four local Composer configurations (standard/custom layout on each PHP) passed actual installation of 1.0.0, rejection of direct new-patch application without source changes, reversal by the 1.0.0 tool, update to the new package, repeated operations and clean installation. Standard layouts passed the associated HTTP/API regressions; custom layouts used Upload 2.0.10 with email absent. These pre-publication checks used a local Git VCS source and fixed local upstream ZIP fixtures.
+
 The following sections retain the historical 1.0.0 distribution results and describe the shared scope and exclusions. The 1.0.0 tag remains unchanged.
 
 ## Release 1.0.0 validation
