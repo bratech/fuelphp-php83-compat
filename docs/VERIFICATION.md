@@ -2,7 +2,21 @@
 
 ## Release status
 
-Compatibility release 1.0.0 is UNRELEASED. The results below describe the underlying patched source and its recorded tests on 2026-10-21. They do not by themselves establish that the new distribution CLI, Composer integration or GitHub installation has passed release validation. GitHub VCS retrieval and a published release tag remain unverified before publication.
+Compatibility release 1.0.0 is UNRELEASED. The distribution checks and underlying patch tests below passed locally on 2026-10-21. GitHub VCS retrieval and installation from a published release tag remain unverified before publication.
+
+## Distribution checks
+
+On both PHP 7.4.33 and 8.3.24, the inspector passed 38 cases, the transaction handler passed 18 cases, and the CLI scenario suite passed. Syntax checks and Composer metadata validation also passed. The tests cover unknown versions and hashes, partial application, path and symlink rejection, malformed configuration, idempotence, lock contention, missing Git, invalid patches, failed writes, failed restoration, concurrent unknown edits and old-release reversal before a new set is applied.
+
+All seven generated patches were applied to the verified originals. The resulting 31 files matched the existing patched-source SHA-256 hashes. The five official Upload 2.0.10 source files were checked separately without a patch.
+
+Composer 2.8.1 installation was tested in four disposable projects: both PHP versions with standard paths and Upload 2.0.6, and both versions with changed vendor/installer paths, Upload 2.0.10 and no email package. Composer fetched this package from its local Git repository; upstream dependencies came from local ZIP archives of the fixed sources. This confirms local VCS and installation behavior, not GitHub availability or fresh upstream downloads.
+
+Each project exercised script-disabled update, status/check, apply, repeated apply, reverse and repeated reverse, followed by a clean install from its lock. The install hooks ran apply and check before the existing Oil install task. The alternate layout also passed Oil startup and 28 Upload checks per PHP version.
+
+The standard-layout projects ran the existing 20 HTTP and 20 direct-API cases, database 24, MySQLi result 68, PDO result 118, Model_Crud 46, Security 12, core boundary 15, date formatting 24, parsing 65, system-timezone 13 and Upload 28 checks per PHP version. Their main database used PDO SQLite; dedicated MySQLi/PDO MySQL checks used MariaDB. This distribution pass did not repeat the entire twelve-run matrix described below.
+
+Independent review found two issues that were reproduced and fixed before the final local installation pass: malformed Composer configuration could fall back to default paths, and final transaction checks covered only selected packages. Invalid configuration now fails, and final verification covers every installed target. Failures still restore only files changed by that transaction.
 
 ## Underlying patch tests
 
