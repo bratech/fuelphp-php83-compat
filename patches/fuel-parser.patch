@@ -1,0 +1,20 @@
+--- a/classes/view/markdown.php
++++ b/classes/view/markdown.php
+@@ -35,7 +35,16 @@
+ 		return static::parser()->transform($contents);
+ 	}
+ 
+-	protected static function pre_process($_type = 'php', $_view_filename, array $_data = array())
++	/**
++	 * Render a PHP view with the supplied variables before Markdown parsing.
++	 *
++	 * @param string $_type Preprocessor type; only php renders the view.
++	 * @param string $_view_filename Path to the view file.
++	 * @param array $_data Variables made available to the view.
++	 * @return string|null The rendered output, or null for other preprocessor types.
++	 * @throws \Exception Propagates view exceptions after discarding the output buffer.
++	 */
++	protected static function pre_process($_type, $_view_filename, array $_data = array())
+ 	{
+ 		if ($_type == 'php')
+ 		{

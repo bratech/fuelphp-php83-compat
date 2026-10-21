@@ -1,0 +1,260 @@
+--- a/src/File.php
++++ b/src/File.php
+@@ -549,59 +549,117 @@
+ 	//------------------------------------------------------------------------------------------------------------------
+ 
+ 	/**
+-	 * Countable methods
+-	 */
++	 * Count the file attributes in the container.
++	 *
++	 * @return int The number of entries.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function count()
+ 	{
+ 		return count($this->container);
+ 	}
+ 
+ 	/**
+-	 * ArrayAccess methods
+-	 */
++	 * Check whether a container key has a non-null value.
++	 *
++	 * @param mixed $offset Container key to check.
++	 * @return bool Whether a non-null value exists at the key.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetExists($offset)
+ 	{
+ 		return isset($this->container[$offset]);
+ 	}
+ 
++	/**
++	 * Return a file attribute by its container key.
++	 * Missing keys trigger PHP's undefined-key diagnostic.
++	 *
++	 * @param mixed $offset Attribute key to read.
++	 * @return mixed The attribute value.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetGet($offset)
+ 	{
+ 		return $this->container[$offset];
+ 	}
+ 
++	/**
++	 * Assign a file attribute by its container key.
++	 *
++	 * @param mixed $offset Attribute key to write.
++	 * @param mixed $value Value to assign.
++	 * @return void
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetSet($offset, $value)
+ 	{
+ 		$this->container[$offset] = $value;
+ 	}
+ 
++	/**
++	 * Reject removal of file attributes through array access.
++	 *
++	 * @param mixed $offset Key requested for removal.
++	 * @return void
++	 * @throws \OutOfBoundsException Always; entries cannot be removed through array access.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetUnset($offset)
+ 	{
+ 		throw new \OutOfBoundsException('You can not unset a data element of an Upload File instance');
+ 	}
+ 
+ 	/**
+-	 * Iterator methods
+-	 */
++	 * Reset the iteration position to the first entry.
++	 *
++	 * @return mixed The first attribute value, or false if the container is empty.
++	 */
++	#[\ReturnTypeWillChange]
+ 	function rewind()
+ 	{
+ 		return reset($this->container);
+ 	}
+ 
++	/**
++	 * Return the entry at the current iteration position.
++	 *
++	 * @return mixed The current attribute value, or false when the position is invalid.
++	 */
++	#[\ReturnTypeWillChange]
+ 	function current()
+ 	{
+ 		return current($this->container);
+ 	}
+ 
++	/**
++	 * Return the key at the current iteration position.
++	 *
++	 * @return int|string|null The current attribute key, or null when the position is invalid.
++	 */
++	#[\ReturnTypeWillChange]
+ 	function key()
+ 	{
+ 		return key($this->container);
+ 	}
+ 
++	/**
++	 * Advance the iteration position to the next entry.
++	 *
++	 * @return mixed The next attribute value, or false when no next element exists.
++	 */
++	#[\ReturnTypeWillChange]
+ 	function next()
+ 	{
+ 		return next($this->container);
+ 	}
+ 
++	/**
++	 * Check whether the current iteration position contains an entry.
++	 *
++	 * @return bool Whether the current position is valid.
++	 */
++	#[\ReturnTypeWillChange]
+ 	function valid()
+ 	{
+ 		return key($this->container) !== null;
+--- a/src/Upload.php
++++ b/src/Upload.php
+@@ -490,24 +490,39 @@
+ 	//------------------------------------------------------------------------------------------------------------------
+ 
+ 	/**
+-	 * Countable methods
+-	 */
++	 * Count the uploaded files in the container.
++	 *
++	 * @return int The number of entries.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function count()
+ 	{
+ 		return count($this->container);
+ 	}
+ 
+ 	/**
+-	 * ArrayAccess methods
+-	 */
++	 * Check whether a container key has a non-null value.
++	 *
++	 * @param mixed $offset Container key to check.
++	 * @return bool Whether a non-null value exists at the key.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetExists($offset)
+ 	{
+ 		return isset($this->container[$offset]);
+ 	}
+ 
++	/**
++	 * Look up a file by numeric index or files by an element name prefix.
++	 * String offsets accept both form notation and dot notation.
++	 *
++	 * @param mixed $offset Numeric index or string element name prefix.
++	 * @return File|File[]|null A file for a numeric index, an array for a matching prefix, or null if not found.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetGet($offset)
+ 	{
+-		// if the requested key is alphanumeric, do a search on element name
++		// String offsets search by element name prefix, including numeric strings.
+ 		if (is_string($offset))
+ 		{
+ 			// if it's in form notation, convert it to dot notation
+@@ -539,39 +554,84 @@
+ 		return null;
+ 	}
+ 
++	/**
++	 * Reject assignment to the read-only file collection.
++	 *
++	 * @param mixed $offset Key requested for assignment.
++	 * @param mixed $value Value requested for assignment.
++	 * @return void
++	 * @throws \OutOfBoundsException Always; files cannot be assigned through array access.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetSet($offset, $value)
+ 	{
+ 		throw new \OutOfBoundsException('An Upload Files instance is read-only, its contents can not be altered');
+ 	}
+ 
++	/**
++	 * Reject removal of uploaded files through array access.
++	 *
++	 * @param mixed $offset Key requested for removal.
++	 * @return void
++	 * @throws \OutOfBoundsException Always; entries cannot be removed through array access.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetUnset($offset)
+ 	{
+ 		throw new \OutOfBoundsException('An Upload Files instance is read-only, its contents can not be altered');
+ 	}
+ 
+ 	/**
+-	 * Iterator methods
+-	 */
++	 * Reset the iteration position to the first entry.
++	 *
++	 * @return void
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function rewind()
+ 	{
+ 		$this->index = 0;
+ 	}
+ 
++	/**
++	 * Return the file at the current index; call valid() before reading.
++	 * An invalid index triggers PHP's undefined-key diagnostic.
++	 *
++	 * @return File|null The current file; null only if execution continues after an undefined-key diagnostic.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function current()
+ 	{
+ 		return $this->container[$this->index];
+ 	}
+ 
++	/**
++	 * Return the key at the current iteration position.
++	 *
++	 * @return int The current numeric index, including positions beyond the last file.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function key()
+ 	{
+ 		return $this->index;
+ 	}
+ 
++	/**
++	 * Advance the iteration position to the next entry.
++	 *
++	 * @return void
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function next()
+ 	{
+ 		++$this->index;
+ 	}
+ 
++	/**
++	 * Check whether the current iteration position contains an entry.
++	 *
++	 * @return bool Whether the current position is valid.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function valid()
+ 	{
+ 		return isset($this->container[$this->index]);

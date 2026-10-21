@@ -1,0 +1,54 @@
+FuelPHP PHP 8.3 compatibility set
+Compatibility release 1.0.0 (UNRELEASED)
+
+New CLI code, tests, compatibility additions and documentation:
+Copyright (c) 2026 bratech and contributors
+Licensed under the MIT License in LICENSE.
+
+This package distributes source patches, not complete upstream libraries.
+The new-work license does not replace upstream notices or conditions.
+Consumers obtain upstream packages separately and must retain their notices.
+
+FuelPHP source portions
+----------------------
+Packages: fuel/core, fuel/email, fuel/oil, fuel/orm, fuel/parser, all 1.8.2.
+Upstream: https://github.com/fuel
+Source headers state:
+  @author     Fuel Development Team
+  @license    MIT License
+  @copyright  2010 - 2019 Fuel Development Team
+
+LICENSES/Fuel-MIT.txt reproduces the Fuel application template's MIT text,
+including its original Copyright (c) 2010-2016 Fuel Development Team line.
+The affected 1.8.2 source files additionally carry the 2010 - 2019 notice above;
+that source notice is retained here, not replaced by the template's year range.
+Exact package references are recorded in manifest.json.
+
+Additional inherited notices in affected Fuel source files:
+  Cookie: @copyright (c) 2008-2010 Kohana Team
+          @license http://kohanaframework.org/license
+  Database files: @copyright 2008 - 2009 Kohana Team
+  Crypt: Sodium encryption/decryption code based on HaLite from ParagonIE
+         Copyright (c) 2016 - 2018 Paragon Initiative Enterprises.
+         Copyright (c) 2014 Steve "Sc00bz" Thomas (steve at tobtu dot com)
+These source files declare the Fuel MIT license. Their original headers remain
+in the installed source when the patches are applied.
+
+Upload source portions
+----------------------
+Package: fuelphp/upload 2.0.6 (patched), 2.0.10 (source checks only).
+Upstream: https://github.com/fuelphp/upload
+Copyright (c) 2010 - 2015 Fuel Development Team
+MIT license reproduced verbatim in LICENSES/Upload-MIT.txt from 2.0.6.
+No source patch is distributed for Upload 2.0.10.
+
+PHP Markdown source portions
+----------------------------
+Package: michelf/php-markdown 1.7.0.
+Upstream: https://github.com/michelf/php-markdown
+PHP Markdown Lib, Copyright (c) 2004-2016 Michel Fortin.
+Based on Markdown, Copyright (c) 2003-2006 John Gruber.
+All rights reserved.
+The original source headers also credit Original Markdown as 2004-2006.
+BSD-3-Clause license and the original notices are reproduced verbatim in
+LICENSES/PHP-Markdown-BSD-3-Clause.md.

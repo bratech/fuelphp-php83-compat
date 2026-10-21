@@ -1,0 +1,180 @@
+--- a/classes/console.php
++++ b/classes/console.php
+@@ -173,7 +173,7 @@
+ 
+ 		for ($i = 0; $i < strlen($line); $i++)
+ 		{
+-			$c = $line{$i};
++			$c = $line[$i];
+ 			if ($c == "'")
+ 			{
+ 				$sq = !$sq;
+--- a/classes/generate.php
++++ b/classes/generate.php
+@@ -50,11 +50,15 @@
+ 	);
+ 
+ 	/**
+-	 *
++	 * Merge the supplied values into the existing configuration and save it.
++	 *
++	 * @param array $args The config filename followed by name:value settings.
++	 * @return void
++	 * @throws Exception If the name is missing, the module is not loaded, or the file cannot be written or overwritten.
+ 	 */
+ 	public static function config($args)
+ 	{
+-		$file = strtolower(array_shift($args));
++		$file = strtolower(array_shift($args) ?? '');
+ 
+ 		if (empty($file))
+ 		{
+@@ -150,11 +154,16 @@
+ 	}
+ 
+ 	/**
+-	 *
++	 * Generate a controller and views for the requested actions.
++	 *
++	 * @param array $args The controller name followed by action names.
++	 * @param bool $build Whether to write queued files now or leave them queued.
++	 * @return void
++	 * @throws Exception If the name is missing, the module is unavailable, or an output file cannot be created.
+ 	 */
+ 	public static function controller($args, $build = true)
+ 	{
+-		if ( ! ($name = \Str::lower(array_shift($args))))
++		if ( ! ($name = \Str::lower(array_shift($args) ?? '')))
+ 		{
+ 			throw new Exception('No controller name was provided.');
+ 		}
+@@ -266,11 +275,16 @@
+ 	}
+ 
+ 	/**
+-	 *
++	 * Generate a model from field definitions and CLI options, with an optional migration.
++	 *
++	 * @param array $args The model name followed by field definitions.
++	 * @param bool $build Whether to write queued files now or leave them queued.
++	 * @return void
++	 * @throws \Exception If arguments are invalid, the module is unavailable, or an output file cannot be created.
+ 	 */
+ 	public static function model($args, $build = true)
+ 	{
+-		$singular = \Inflector::singularize(\Str::lower(array_shift($args)));
++		$singular = \Inflector::singularize(\Str::lower(array_shift($args) ?? ''));
+ 
+ 		$args = static::normalize_args($args);
+ 
+@@ -721,11 +735,15 @@
+ 	}
+ 
+ 	/**
+-	 *
++	 * Create a module directory structure in a configured module path.
++	 *
++	 * @param array $args CLI arguments with the module name as the first element.
++	 * @return void
++	 * @throws Exception If the name is missing or the module already exists.
+ 	 */
+ 	public static function module($args)
+ 	{
+-		if ( ! ($module_name = strtolower(array_shift($args)) ) )
++		if ( ! ($module_name = strtolower(array_shift($args) ?? '') ) )
+ 		{
+ 			throw new Exception('No module name has been provided.');
+ 		}
+@@ -834,12 +852,17 @@
+ 	}
+ 
+ 	/**
+-	 *
++	 * Generate a migration using the operation in its name and the supplied fields.
++	 *
++	 * @param array $args The migration name followed by field definitions.
++	 * @param bool $build Whether to write queued files now or leave them queued.
++	 * @return void
++	 * @throws \Exception If arguments are invalid, the module is unavailable, or an output file cannot be created.
+ 	 */
+ 	public static function migration($args, $build = true)
+ 	{
+-		// Get the migration name
+-		$migration_name = \Str::lower(str_replace(array('-', '/'), '_', array_shift($args)));
++		// Normalize the migration name before validating it and selecting an operation.
++		$migration_name = \Str::lower(str_replace(array('-', '/'), '_', array_shift($args) ?? ''));
+ 
+ 		// what type of migration do we have?
+ 		$type = explode('_', $migration_name);
+@@ -1055,12 +1078,17 @@
+ 	}
+ 
+ 	/**
+-	 *
++	 * Generate an Oil task with the requested actions.
++	 *
++	 * @param array $args The task name followed by action names.
++	 * @param bool $build Whether to write queued files now or leave them queued.
++	 * @return void
++	 * @throws Exception If names are invalid, the module is unavailable, or an output file cannot be created.
+ 	 */
+ 	public static function task($args, $build = true)
+ 	{
+ 
+-		if ( ! ($name = \Str::lower(array_shift($args))))
++		if ( ! ($name = \Str::lower(array_shift($args) ?? '')))
+ 		{
+ 			throw new Exception('No task name was provided.');
+ 		}
+@@ -1211,11 +1239,16 @@
+ 	}
+ 
+ 	/**
+-	 *
++	 * Generate package classes and configuration, with Composer metadata when requested.
++	 *
++	 * @param array $args CLI arguments with the package name as the first element.
++	 * @param bool $build Whether to write queued files now or leave them queued.
++	 * @return void
++	 * @throws \Exception If the name or path is invalid, the package exists, or an output file cannot be created.
+ 	 */
+ 	public static function package($args, $build = true)
+ 	{
+-		$name       = str_replace(array('/', '_', '-'), '', \Str::lower(array_shift($args)));
++		$name       = str_replace(array('/', '_', '-'), '', \Str::lower(array_shift($args) ?? ''));
+ 		$class_name = ucfirst($name);
+ 		$vcs        = \Cli::option('vcs', \Cli::option('v', false));
+ 		$path       = \Cli::option('path', \Cli::option('p', PKGPATH));
+--- a/classes/refine.php
++++ b/classes/refine.php
+@@ -21,9 +21,19 @@
+  */
+ class Refine
+ {
++	/**
++	 * Load a task and invoke its method with the supplied arguments.
++	 * Print the result if it is truthy.
++	 *
++	 * @param string|null $task A task name, optionally in module::task:method form; null or empty displays help.
++	 * @param array $args Positional arguments passed to the task method.
++	 * @return void
++	 * @throws Exception If the module or task cannot be found.
++	 * @throws \Exception Propagates exceptions raised by the task.
++	 */
+ 	public static function run($task, $args = array())
+ 	{
+-		$task = strtolower($task);
++		$task = strtolower($task === null ? '' : $task);
+ 
+ 		// Make sure something is set
+ 		if (empty($task) or $task === 'help')
+@@ -72,7 +82,8 @@
+ 
+ 			ksort($possibilities);
+ 
+-			if ($possibilities and current($possibilities) <= 5)
++			// The first key is the smallest edit distance; suggest that task only if it is close enough.
++			if ($possibilities and key($possibilities) <= 5)
+ 			{
+ 				throw new Exception(sprintf('Task "%s" does not exist. Did you mean "%s"?', $task, current($possibilities)));
+ 			}

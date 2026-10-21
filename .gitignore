@@ -1,0 +1,4 @@
+/vendor/
+/composer.lock
+/.fuelphp-compat.lock
+/.fuelphp-compat-*/

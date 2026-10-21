@@ -1,0 +1,23 @@
+{
+    "name": "bratech/fuelphp-php83-compat",
+    "description": "Verified compatibility patches and an installer for FuelPHP 1.8.2 on PHP 7.4 and 8.3",
+    "type": "library",
+    "license": "(MIT AND BSD-3-Clause)",
+    "require": {
+        "php": "^7.4 || ~8.3.0",
+        "ext-intl": "*"
+    },
+    "bin": ["bin/fuelphp-compat"],
+    "autoload": {
+        "psr-4": {
+            "Bratech\\FuelPhpCompat\\": "src/"
+        }
+    },
+    "scripts": {
+        "test": [
+            "@php tests/project.php",
+            "@php tests/transaction.php",
+            "@php tests/cli.php"
+        ]
+    }
+}

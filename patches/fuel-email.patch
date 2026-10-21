@@ -1,0 +1,43 @@
+--- a/classes/email/driver/smtp.php
++++ b/classes/email/driver/smtp.php
+@@ -315,26 +315,32 @@
+ 	}
+ 
+ 	/**
+-	 * Get SMTP response
+-	 *
+-	 * @throws \SmtpTimeoutException
+-	 *
+-	 * @return  string  SMTP response
++	 * Read an SMTP response until its final line or the end of the stream.
++	 *
++	 * @throws SmtpTimeoutException If a stream read times out.
++	 *
++	 * @return string The SMTP response received so far.
+ 	 */
+ 	protected function smtp_get_response()
+ 	{
+ 		$data = '';
+ 
+-		// set the timeout.
++		// Use the same read timeout for the initial greeting and command responses.
+ 		stream_set_timeout($this->smtp_connection, $this->config['smtp']['timeout']);
+ 
+-		while($str = fgets($this->smtp_connection, 512))
+-		{
++		while (true)
++		{
++			$str = fgets($this->smtp_connection, 512);
++			// Check for a timeout before treating a false return from fgets() as end of input.
+ 			$info = stream_get_meta_data($this->smtp_connection);
+ 			if($info['timed_out'])
+ 			{
+ 				throw new SmtpTimeoutException('SMTP connection timed out.');
+ 			}
++			if ($str === false)
++			{
++				break;
++			}
+ 
+ 			$data .= $str;
+ 

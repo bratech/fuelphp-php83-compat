@@ -1,0 +1,81 @@
+#!/usr/bin/env php
+<?php
+
+use Bratech\FuelPhpCompat\Project;
+use Bratech\FuelPhpCompat\Transaction;
+
+require_once __DIR__ . '/../src/Project.php';
+require_once __DIR__ . '/../src/Transaction.php';
+
+$release = '1.0.0';
+$usage = 'Usage: fuelphp-compat <status|check|apply|reverse> [--root=path] [--json (status/check only)]';
+$arguments = array_slice($argv, 1);
+$command = array_shift($arguments);
+$root = getcwd();
+$json = false;
+$rootSeen = false;
+
+// Parse arguments before runtime checks so invalid invocations always exit 2.
+try {
+    if (!in_array($command, ['status', 'check', 'apply', 'reverse'], true)) {
+        throw new InvalidArgumentException('Expected a command: status, check, apply, or reverse.');
+    }
+    for ($index = 0; $index < count($arguments); $index++) {
+        $argument = $arguments[$index];
+        if ($argument === '--json' && !$json && in_array($command, ['status', 'check'], true)) {
+            $json = true;
+        } elseif ($argument === '--root' || strpos($argument, '--root=') === 0) {
+            if ($rootSeen) {
+                throw new InvalidArgumentException('--root can only be specified once.');
+            }
+            $rootSeen = true;
+            $root = $argument === '--root' ? ($arguments[++$index] ?? '') : substr($argument, 7);
+            if ($root === '' || strpos($root, '--') === 0) {
+                throw new InvalidArgumentException('--root requires a path.');
+            }
+        } else {
+            throw new InvalidArgumentException('Unknown or misplaced argument: ' . $argument);
+        }
+    }
+} catch (InvalidArgumentException $error) {
+    fwrite(STDERR, 'Compatibility release: ' . $release . "\n" . $error->getMessage() . "\n" . $usage . "\n");
+    exit(2);
+}
+
+try {
+    if (!((PHP_VERSION_ID >= 70400 && PHP_VERSION_ID < 70500)
+        || (PHP_VERSION_ID >= 80300 && PHP_VERSION_ID < 80400))) {
+        throw new RuntimeException('This release supports PHP 7.4 and PHP 8.3; current CLI is ' . PHP_VERSION . '.');
+    }
+    if (!extension_loaded('intl')) {
+        throw new RuntimeException('The CLI requires ext-intl. Enable intl for this PHP executable.');
+    }
+    $packageRoot = dirname(__DIR__);
+    $project = new Project($root, $packageRoot);
+    if ($command === 'apply' || $command === 'reverse') {
+        $report = (new Transaction($project, $packageRoot))->run($command);
+    } else {
+        $report = $project->inspect();
+    }
+    if ($json) {
+        echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+    } else {
+        echo 'Compatibility release: ' . $report['release'] . "\n";
+        foreach ($report['packages'] as $name => $package) {
+            echo $name . ' ' . ($package['version'] ?? '-') . ': ' . str_replace('_', ' ', $package['state']);
+            if ($package['reason'] !== '') {
+                echo ' (' . $package['reason'] . ')';
+            }
+            echo "\n";
+        }
+    }
+    $failed = $command === 'check' ? !Project::isReady($report) : Project::hasErrors($report);
+    exit($failed ? 1 : 0);
+} catch (Throwable $error) {
+    if ($json) {
+        echo json_encode(['release' => $release, 'error' => $error->getMessage()], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE) . "\n";
+    } else {
+        fwrite(STDERR, 'Compatibility release: ' . $release . "\nError: " . $error->getMessage() . "\n");
+    }
+    exit(1);
+}

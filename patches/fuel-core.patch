@@ -1,0 +1,2108 @@
+--- a/classes/controller/rest.php
++++ b/classes/controller/rest.php
+@@ -49,6 +49,9 @@
+ 	 */
+ 	protected $http_status = 200;
+ 
++	/** @var \Response|null Response created by before() and returned by after(). */
++	public $response = null;
++
+ 	/**
+ 	 * @var  string  xml basenode name
+ 	 */
+--- a/classes/cookie.php
++++ b/classes/cookie.php
+@@ -97,7 +97,16 @@
+ 		// add the current time so we have an offset
+ 		$expiration = $expiration > 0 ? $expiration + time() : 0;
+ 
+-		return setcookie($name, $value, $expiration, $path, $domain, $secure, $http_only);
++		// Preserve the empty-string and false defaults when optional arguments are null.
++		return setcookie(
++			$name,
++			$value === null ? '' : $value,
++			$expiration,
++			$path === null ? '' : $path,
++			$domain === null ? '' : $domain,
++			$secure === null ? false : $secure,
++			$http_only === null ? false : $http_only
++		);
+ 	}
+ 
+ 	/**
+--- a/classes/crypt.php
++++ b/classes/crypt.php
+@@ -410,11 +410,25 @@
+ 	protected $crypter = null;
+ 
+ 	/**
++	 * AES cipher for decrypting legacy ciphertext.
++	 *
++	 * @var AES|null Initialized only when legacy configuration is provided.
++	 */
++	public $legacy_crypter = null;
++
++	/**
+ 	 * Hash object used to generate hashes
+ 	 *
+ 	 * @var	object
+ 	 */
+ 	protected $hasher = null;
++
++	/**
++	 * HMAC used to authenticate legacy ciphertext.
++	 *
++	 * @var Hash|null Initialized only when legacy configuration is provided.
++	 */
++	public $legacy_hasher = null;
+ 
+ 	/**
+ 	 * Crypto configuration
+--- a/classes/database/mysqli/cached.php
++++ b/classes/database/mysqli/cached.php
+@@ -86,10 +86,12 @@
+ 	 *************************/
+ 
+ 	/**
+-	 * @param integer $offset
+-	 *
+-	 * @return bool
+-	 */
++	 * Move to the requested row; an invalid offset leaves the position unchanged.
++	 *
++	 * @param int $offset Zero-based row offset.
++	 * @return bool True on success, false if the offset does not exist.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function seek($offset)
+ 	{
+ 		if ( ! $this->offsetExists($offset))
+@@ -111,6 +113,7 @@
+ 	 *
+ 	 * @return  mixed
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function current()
+ 	{
+ 		if ($this->valid())
+@@ -136,6 +139,7 @@
+ 	 *
+ 	 * @return  mixed
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function next()
+ 	{
+ 		parent::next();
+@@ -159,6 +163,7 @@
+ 	 *
+ 	 * @return boolean
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetExists($offset)
+ 	{
+ 		return isset($this->_results[$offset]);
+@@ -173,6 +178,7 @@
+ 	 *
+ 	 * @return  mixed
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetGet($offset)
+ 	{
+ 		if ( ! $this->offsetExists($offset))
+@@ -201,6 +207,7 @@
+ 	 *
+ 	 * @throws  \FuelException
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	final public function offsetSet($offset, $value)
+ 	{
+ 		throw new \FuelException('Database results are read-only');
+@@ -214,6 +221,7 @@
+ 	 *
+ 	 * @throws  \FuelException
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	final public function offsetUnset($offset)
+ 	{
+ 		throw new \FuelException('Database results are read-only');
+--- a/classes/database/mysqli/connection.php
++++ b/classes/database/mysqli/connection.php
+@@ -122,6 +122,13 @@
+ 				throw new \Database_Exception(str_replace($password, str_repeat('*', 10), $this->_connection->error), $this->_connection->errno, null, $this->_connection->errno);
+ 			}
+ 		}
++		catch (\mysqli_sql_exception $e)
++		{
++			$this->_connection = null;
++
++			// Use E_WARNING for connection failures and retain the SQL exception as the cause.
++			throw new \Database_Exception(str_replace($password, str_repeat('*', 10), $e->getMessage()), E_WARNING, $e, E_WARNING);
++		}
+ 		catch (\ErrorException $e)
+ 		{
+ 			// No connection exists
+@@ -289,8 +296,19 @@
+ 			$this->_select_db($this->_config['connection']['database']);
+ 		}
+ 
+-		// Execute the query
+-		if (($result = $this->_connection->query($sql, $caching ? MYSQLI_STORE_RESULT :MYSQLI_USE_RESULT)) === false)
++		// Handle MySQLi exceptions and false results through the same Database_Exception path.
++		$query_error = null;
++		try
++		{
++			$result = $this->_connection->query($sql, $caching ? MYSQLI_STORE_RESULT : MYSQLI_USE_RESULT);
++		}
++		catch (\mysqli_sql_exception $e)
++		{
++			$query_error = $e;
++			$result = false;
++		}
++
++		if ($result === false)
+ 		{
+ 			if (isset($benchmark))
+ 			{
+@@ -298,7 +316,7 @@
+ 				\Profiler::delete($benchmark);
+ 			}
+ 
+-			throw new \Database_Exception($this->_connection->error.' [ '.$sql.' ]', $this->_connection->errno, null, $this->_connection->errno);
++			throw new \Database_Exception($this->_connection->error.' [ '.$sql.' ]', $this->_connection->errno, $query_error, $this->_connection->errno);
+ 		}
+ 
+ 		// check for multiresults, we don't support those at the moment
+--- a/classes/database/mysqli/result.php
++++ b/classes/database/mysqli/result.php
+@@ -13,27 +13,56 @@
+ 
+ namespace Fuel\Core;
+ 
++/**
++ * Buffer MySQLi rows for counting and repeatable iteration.
++ *
++ * Unbuffered results must be fully read to determine the row count, so memory use grows with the result.
++ * Use cached() when array access or seek() is needed.
++ */
+ class Database_MySQLi_Result extends \Database_Result
+ {
+ 	/**
+-	 * Sets the total number of rows and stores the result locally.
++	 * Fetch all rows in the requested format and release the connection for further queries.
+ 	 *
+-	 * @param  mixed   $result     query result
+-	 * @param  string  $sql        SQL query
+-	 * @param  mixed   $as_object  object
++	 * @param \mysqli_result $result Result of the executed query.
++	 * @param string $sql Executed SQL.
++	 * @param mixed $as_object False for arrays, a class name or instance for that class, otherwise stdClass.
++	 * @throws \Throwable If fetching rows or constructing row objects fails.
+ 	 */
+ 	public function __construct($result, $sql, $as_object)
+ 	{
+ 		parent::__construct($result, $sql, $as_object);
+ 
+-		// Find the number of rows in the result
+-		$this->_total_rows = $result->num_rows;
++		// Let MySQLi control the order of property assignment and constructor calls.
++		$this->_results = array();
++		try
++		{
++			if ($this->_as_object === false)
++			{
++				$this->_results = $result->fetch_all(MYSQLI_ASSOC);
++			}
++			else
++			{
++				$class = is_string($this->_as_object) ? $this->_as_object : 'stdClass';
++				while ($row = $result->fetch_object($class))
++				{
++					$this->_results[] = $row;
++				}
++			}
++		}
++		finally
++		{
++			// Release unread results even when a row constructor throws.
++			$result->free();
++			$this->_result = null;
++		}
++		$this->_total_rows = count($this->_results);
+ 	}
+ 
+ 	/**
+-	 * Result destruction cleans up all open result sets.
++	 * Free any remaining MySQLi result resource.
+ 	 *
+-	 * @return  void
++	 * @return void
+ 	 */
+ 	public function __destruct()
+ 	{
+@@ -44,49 +73,53 @@
+ 	}
+ 
+ 	/**
+-	 * Get a cached database result from the current result iterator.
++	 * Create a cached result containing all rows, regardless of the current position.
+ 	 *
+-	 *     $cachable = serialize($result->cached());
+-	 *
+-	 * @return  Database_PDO_Cached
++	 * @return Database_MySQLi_Cached Result supporting array access and seeking.
+ 	 */
+ 	public function cached()
+ 	{
+-		return new \Database_MySQLi_Cached($this->_result, $this->_query, $this->_as_object);
++		return new \Database_MySQLi_Cached($this->_results, $this->_query, $this->_as_object);
+ 	}
+ 
+-	/**************************
+-	 * Iterable methods
+-	 *************************/
++	// The base class tracks the iterator position; rows come from the buffer.
+ 
+ 	/**
+-	 * Implements [Iterator::next], returns the next row.
++	 * Return the current row, advancing to the first row if iteration has not started.
+ 	 *
+-	 * @return  mixed
++	 * @return mixed Row in the requested format, filtered if enabled; null if no row exists.
++	 * @throws \Throwable If output filtering or cloning a row object fails.
+ 	 */
+-	public function next()
++	#[\ReturnTypeWillChange]
++	public function current()
+ 	{
+-		// Convert the result into an array, as PDOStatement::rowCount is not reliable
+-		if ($this->_as_object === false)
++		if ($this->_current_row < 0)
+ 		{
+-			$this->_row = $this->_result->fetch_array(MYSQLI_ASSOC);
+-		}
+-		elseif (is_string($this->_as_object))
+-		{
+-			$this->_row = $this->_result->fetch_object($this->_as_object);
+-		}
+-		else
+-		{
+-			$this->_row = $this->_result->fetch_object();
++			return $this->next();
+ 		}
+ 
+-		// sanitize the data if needed
+-		if ($this->_sanitization_enabled)
++		// Keep raw rows for get() and reads after unsanitize(), avoiding repeated output filtering.
++		if ($this->_sanitization_enabled and $this->valid())
+ 		{
+-			$this->_row = \Security::clean($result, null, 'security.output_filter');
++			$row = is_object($this->_row) ? clone $this->_row : $this->_row;
++			return \Security::clean($row, null, 'security.output_filter');
+ 		}
+ 
+ 		return $this->_row;
+ 	}
+ 
++	/**
++	 * Advance to the next row and return it.
++	 *
++	 * @return mixed Row in the requested format, filtered if enabled; null past the end.
++	 * @throws \Throwable If output filtering or cloning a row object fails.
++	 */
++	#[\ReturnTypeWillChange]
++	public function next()
++	{
++		parent::next();
++		$this->_row = isset($this->_results[$this->_current_row]) ? $this->_results[$this->_current_row] : null;
++
++		return $this->current();
++	}
+ }
+--- a/classes/database/pdo/cached.php
++++ b/classes/database/pdo/cached.php
+@@ -78,10 +78,12 @@
+ 	 *************************/
+ 
+ 	/**
+-	 * @param integer $offset
+-	 *
+-	 * @return bool
+-	 */
++	 * Move to the requested row; an invalid offset leaves the position unchanged.
++	 *
++	 * @param int $offset Zero-based row offset.
++	 * @return bool True on success, false if the offset does not exist.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function seek($offset)
+ 	{
+ 		if ( ! $this->offsetExists($offset))
+@@ -103,6 +105,7 @@
+ 	 *
+ 	 * @return  mixed
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function current()
+ 	{
+ 		if ($this->valid())
+@@ -128,6 +131,7 @@
+ 	 *
+ 	 * @return  mixed
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function next()
+ 	{
+ 		parent::next();
+@@ -151,6 +155,7 @@
+ 	 *
+ 	 * @return boolean
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetExists($offset)
+ 	{
+ 		return isset($this->_results[$offset]);
+@@ -165,6 +170,7 @@
+ 	 *
+ 	 * @return  mixed
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetGet($offset)
+ 	{
+ 		if ( ! $this->offsetExists($offset))
+@@ -193,6 +199,7 @@
+ 	 *
+ 	 * @throws  \FuelException
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	final public function offsetSet($offset, $value)
+ 	{
+ 		throw new \FuelException('Database results are read-only');
+@@ -206,6 +213,7 @@
+ 	 *
+ 	 * @throws  \FuelException
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	final public function offsetUnset($offset)
+ 	{
+ 		throw new \FuelException('Database results are read-only');
+--- a/classes/database/pdo/connection.php
++++ b/classes/database/pdo/connection.php
+@@ -27,8 +27,11 @@
+ 	protected $_identifier = '';
+ 
+ 	/**
+-	 * @param string $name
+-	 * @param array  $config
++	 * Prepare the connection configuration with default PDO attributes.
++	 *
++	 * @param string $name Connection instance name.
++	 * @param array $config Connection settings, including the DSN, credentials and PDO attributes.
++	 * @return void
+ 	 */
+ 	protected function __construct($name, array $config)
+ 	{
+@@ -46,6 +49,16 @@
+ 			'cached'       => false,
+ 		), $this->_config);
+ 
++		// Fetch numbers as strings for SQLite and MySQL with emulated prepares.
++		// Respect explicit fetch-type settings and MySQL native prepares.
++		$driver = strstr($this->_config['connection']['dsn'], ':', true);
++		if ( ! array_key_exists(\PDO::ATTR_STRINGIFY_FETCHES, $this->_config['attrs'])
++			and ($driver === 'sqlite' or ($driver === 'mysql'
++				and \Arr::get($this->_config['attrs'], \PDO::ATTR_EMULATE_PREPARES, true))))
++		{
++			$this->_config['attrs'][\PDO::ATTR_STRINGIFY_FETCHES] = true;
++		}
++
+ 		// convert generic config values to specific attributes
+ 		if ( ! empty($this->_config['connection']['persistent']))
+ 		{
+@@ -83,7 +96,10 @@
+ 				$error_code = 0;
+ 			}
+ 
+-			throw new \Database_Exception(str_replace($this->_config['connection']['password'], str_repeat('*', 10), $e->getMessage()), $e->getCode(), $e, $error_code);
++			// Keep the connection error intact when no password needs masking, as with SQLite.
++			$password = (string) $this->_config['connection']['password'];
++			$message = $password === '' ? $e->getMessage() : str_replace($password, str_repeat('*', 10), $e->getMessage());
++			throw new \Database_Exception($message, $e->getCode(), $e, $error_code);
+ 		}
+ 	}
+ 
+@@ -292,8 +308,8 @@
+ 			}
+ 			else
+ 			{
+-				// Return an iterator of results
+-				return new \Database_PDO_Result($result, $sql, $as_object);
++				// Buffer SQLite rows to determine the SELECT count within Database_PDO_Result.
++				return new \Database_PDO_Result($result, $sql, $as_object, $this->driver_name() === 'sqlite');
+ 			}
+ 		}
+ 		elseif ($type === \DB::INSERT)
+--- a/classes/database/pdo/result.php
++++ b/classes/database/pdo/result.php
+@@ -13,58 +13,141 @@
+ 
+ namespace Fuel\Core;
+ 
++/**
++ * Retain fetched PDO rows for repeatable iteration and conversion to a cached result.
++ *
++ * Memory use grows with fetched rows; SQLite buffers all rows up front to determine the count.
++ */
+ class Database_PDO_Result extends \Database_Result
+ {
+ 	/**
+-	 * @param  array   $result
+-	 * @param  string  $sql
+-	 * @param  mixed   $as_object
++	 * @var array|null Complete result, or null while using retained rows and the forward-only PDO cursor.
+ 	 */
+-	public function __construct($result, $sql, $as_object = null)
++	protected $_buffered_rows = null;
++
++	/**
++	 * Retain a SELECT result, optionally buffering all rows to determine the count.
++	 *
++	 * SQLite requires buffering because rowCount() does not provide a SELECT row count.
++	 *
++	 * @param \PDOStatement $result Executed SELECT statement.
++	 * @param string $sql Executed SQL.
++	 * @param mixed $as_object False for arrays, a class name or instance for that class, otherwise stdClass.
++	 * @param bool $buffer_rows True to fetch all rows immediately and count them.
++	 * @throws \Throwable If fetching rows, constructing row objects or closing the cursor fails.
++	 */
++	public function __construct($result, $sql, $as_object = null, $buffer_rows = false)
+ 	{
+-		// go the generic construction processing
+ 		parent::__construct($result, $sql, $as_object);
+-
+-		// Find the number of rows in the result
+-		$this->_total_rows = $this->_result->rowCount();
++		$this->_results = array();
++		if ($buffer_rows)
++		{
++			$this->_buffered_rows = $this->fetch_remaining_rows();
++			$this->_total_rows = count($this->_buffered_rows);
++		}
++		else
++		{
++			$this->_total_rows = $result->rowCount();
++		}
+ 	}
+ 
+ 	/**
+-	 * Result destruction cleans up all open result sets.
++	 * Leave statement cleanup to PDO object destruction.
+ 	 *
+ 	 * @return  void
+ 	 */
+ 	public function __destruct()
+ 	{
+-		// Cached results do not use driver resources
+ 	}
+ 
+ 	/**
+-	 * Get a cached database result from the current result iterator.
++	 * Create a cached result from all rows without changing this iterator's position.
+ 	 *
+-	 *     $cachable = serialize($result->cached());
+-	 *
+-	 * @return  Database_PDO_Cached
++	 * @return Database_PDO_Cached Cached result containing all rows.
++	 * @throws \Throwable If fetching unread rows, constructing row objects or closing the cursor fails.
+ 	 */
+ 	public function cached()
+ 	{
+-		return new \Database_PDO_Cached($this->_result, $this->_query, $this->_as_object);
++		if ($this->_buffered_rows === null)
++		{
++			// Prepend retained rows; passing only the statement would omit rows already fetched.
++			$this->_buffered_rows = array_merge($this->_results, $this->fetch_remaining_rows());
++			$this->_total_rows = count($this->_buffered_rows);
++		}
++
++		return new \Database_PDO_Cached($this->_buffered_rows, $this->_query, $this->_as_object);
+ 	}
+ 
+-	/**************************
+-	 * Iterable methods
+-	 *************************/
++	/**
++	 * Fetch unread rows in the requested format and close the cursor.
++	 *
++	 * The caller merges previously fetched rows and manages the iterator position.
++	 * PDO::FETCH_CLASS controls the order of property assignment and constructor calls.
++	 *
++	 * @return array Rows that had not yet been fetched.
++	 * @throws \Throwable If fetching rows, constructing row objects or closing the cursor fails.
++	 */
++	protected function fetch_remaining_rows()
++	{
++		try
++		{
++			return $this->_as_object === false
++				? $this->_result->fetchAll(\PDO::FETCH_ASSOC)
++				: $this->_result->fetchAll(\PDO::FETCH_CLASS, is_string($this->_as_object) ? $this->_as_object : 'stdClass');
++		}
++		finally
++		{
++			// Release unread results even when a row constructor throws.
++			$this->_result->closeCursor();
++		}
++	}
++
++	// The base class tracks the iterator position; retained rows are reused first.
+ 
+ 	/**
+-	 * Implements [Iterator::next], returns the next row.
++	 * Return the current row, fetching the first row if iteration has not started.
+ 	 *
+-	 * @return  mixed
++	 * @return mixed Row in the requested format, filtered if enabled; false if no row exists.
++	 * @throws \Throwable If fetching, constructing, cloning or filtering a row fails.
+ 	 */
++	#[\ReturnTypeWillChange]
++	public function current()
++	{
++		if ($this->_current_row < 0)
++		{
++			return $this->next();
++		}
++
++		// Keep raw rows for get() and reads after unsanitize(), avoiding repeated output filtering.
++		if ($this->_sanitization_enabled and $this->valid())
++		{
++			$row = is_object($this->_row) ? clone $this->_row : $this->_row;
++			return \Security::clean($row, null, 'security.output_filter');
++		}
++
++		return $this->_row;
++	}
++
++	/**
++	 * Advance to the next row, fetching from PDO if it has not been retained.
++	 *
++	 * @return mixed Row in the requested format, filtered if enabled; false past the end.
++	 * @throws \Throwable If fetching, constructing, cloning or filtering a row fails.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function next()
+ 	{
+ 		parent::next();
+ 
+-		if ($this->_as_object === false)
++		if ($this->_buffered_rows !== null)
++		{
++			$this->_row = isset($this->_buffered_rows[$this->_current_row]) ? $this->_buffered_rows[$this->_current_row] : false;
++		}
++		elseif (isset($this->_results[$this->_current_row]))
++		{
++			$this->_row = $this->_results[$this->_current_row];
++		}
++		elseif ($this->_as_object === false)
+ 		{
+ 			$this->_row = $this->_result->fetch(\PDO::FETCH_ASSOC);
+ 		}
+@@ -77,12 +160,12 @@
+ 			$this->_row = $this->_result->fetchObject();
+ 		}
+ 
+-		// sanitize the data if needed
+-		if ($this->_sanitization_enabled)
++		// Retain fetched rows so iteration after current() still includes the first row.
++		if ($this->_buffered_rows === null and $this->_row !== false)
+ 		{
+-			$this->_row = \Security::clean($this->_row, null, 'security.output_filter');
++			$this->_results[$this->_current_row] = $this->_row;
+ 		}
+ 
+-		return $this->_row;
++		return $this->current();
+ 	}
+ }
+--- a/classes/database/query/builder.php
++++ b/classes/database/query/builder.php
+@@ -195,7 +195,8 @@
+ 		{
+ 			list($column, $direction) = $group;
+ 
+-			$direction = strtoupper($direction);
++			// An omitted direction adds neither ASC nor DESC to the SQL.
++			$direction = strtoupper($direction === null ? '' : $direction);
+ 			if ( ! empty($direction))
+ 			{
+ 				// Make the direction uppercase
+--- a/classes/database/result.php
++++ b/classes/database/result.php
+@@ -291,6 +291,7 @@
+ 	 *
+ 	 * @return  integer
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function count()
+ 	{
+ 		return $this->_total_rows;
+@@ -305,6 +306,7 @@
+ 	 *
+ 	 * @return  mixed
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function current()
+ 	{
+ 		return $this->_row;
+@@ -315,6 +317,7 @@
+ 	 *
+ 	 * @return  integer
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function key()
+ 	{
+ 		return $this->_current_row;
+@@ -323,6 +326,7 @@
+ 	/**
+ 	 * Implements [Iterator::next], moves to the next row.
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function next()
+ 	{
+ 		++$this->_current_row;
+@@ -331,6 +335,7 @@
+ 	/**
+ 	 * Implements [Iterator::rewind], sets the current row to -1.
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function rewind()
+ 	{
+ 		// first row is zero, not one!
+@@ -345,6 +350,7 @@
+ 	 *
+ 	 * @return  boolean
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function valid()
+ 	{
+ 		return $this->_current_row >= 0 and $this->_current_row < $this->_total_rows;
+--- a/classes/date.php
++++ b/classes/date.php
+@@ -13,20 +13,16 @@
+ namespace Fuel\Core;
+ 
+ /**
+- * Date Class
++ * Creates, parses and formats dates using locale settings.
+  *
+- * DateTime replacement that supports internationalization and does correction to GMT
+- * when your webserver isn't configured correctly.
++ * Applies the server offset when creating the current time and manages output timezones.
++ * create_from_string() accepts strptime patterns; format() uses strftime patterns.
++ * Month and weekday names come from LC_TIME; era and alternative number output uses ICU.
+  *
+  * @package     Fuel
+  * @subpackage  Core
+  * @category    Core
+  * @link        http://docs.fuelphp.com/classes/date.html
+- *
+- * Notes:
+- * - Always returns Date objects, will accept both Date objects and UNIX timestamps
+- * - create_time() uses strptime and has currently a very bad hack to use strtotime for windows servers
+- * - Uses strftime formatting for dates www.php.net/manual/en/function.strftime.php
+  */
+ class Date
+ {
+@@ -153,11 +149,17 @@
+ 	}
+ 
+ 	/**
+-	 * Uses the date config file to translate string input to timestamp
+-	 *
+-	 * @param   string  $input        date/time input
+-	 * @param   string  $pattern_key  key name of pattern in config file
+-	 * @return  Date
++	 * Creates a Date from a string using a configured or literal strptime pattern.
++	 *
++	 * Missing years and years at or before 1900 are passed to mktime as 2000.
++	 * A missing day defaults to zero unless inferred from a day-of-year or week number.
++	 * Unparsed trailing input and timezone specifiers do not affect the timestamp.
++	 *
++	 * @param string $input Date and time to parse.
++	 * @param string $pattern_key Pattern name in the date configuration, or a strptime pattern.
++	 * @return Date Date interpreted in PHP's default timezone.
++	 * @throws \UnexpectedValueException If the input or pattern cannot be parsed.
++	 * @throws \OutOfBoundsException If mktime cannot represent the date.
+ 	 */
+ 	public static function create_from_string($input, $pattern_key = 'local')
+ 	{
+@@ -166,18 +168,53 @@
+ 		$pattern = \Config::get('date.patterns.'.$pattern_key, null);
+ 		empty($pattern) and $pattern = $pattern_key;
+ 
+-		$time = strptime($input, $pattern);
+-		if ($time === false)
++		$fields = array();
++		if ( ! static::parse_time_fields($input, $pattern, $fields))
+ 		{
+ 			throw new \UnexpectedValueException('Input was not recognized by pattern.');
+ 		}
+ 
+-		// make sure we don't go before the epoch, as that causes weird things to happen
+-		$time['tm_year'] <= 0 and $time['tm_year'] = 100;
+-
+-		// convert it into a timestamp
+-		$timestamp = mktime($time['tm_hour'], $time['tm_min'], $time['tm_sec'],
+-						$time['tm_mon'] + 1, $time['tm_mday'], $time['tm_year'] + 1900);
++		$year = isset($fields['Y']) ? $fields['Y'] : 1900;
++		if (isset($fields['y']))
++		{
++			$year = $fields['y'] + ($fields['y'] <= 68 ? 2000 : 1900);
++		}
++		isset($fields['C']) and $year = $fields['C'] * 100 + (isset($fields['y']) ? $fields['y'] : 0);
++		$month = isset($fields['m']) ? $fields['m'] : 1;
++		$day = isset($fields['d']) ? $fields['d'] : 0;
++
++		// Day-of-year conversion requires a year; week numbers also require a weekday.
++		$year_set = isset($fields['Y']) || isset($fields['y']) || isset($fields['C']);
++		$day_of_year = $year_set && isset($fields['j']) ? $fields['j'] - 1 : null;
++		if ($year_set and (isset($fields['U']) or isset($fields['W'])) and (isset($fields['w']) or isset($fields['u'])))
++		{
++			$monday = isset($fields['W']);
++			$weekday = isset($fields['w']) ? $fields['w'] : $fields['u'] % 7;
++			$first = (int) (new \DateTimeImmutable(sprintf('%04d-01-01', $year)))->format('w');
++			$monday and $weekday = ($weekday + 6) % 7;
++			$monday and $first = ($first + 6) % 7;
++			$day_of_year = $fields[$monday ? 'W' : 'U'] * 7 + $weekday - ($first ?: 7);
++		}
++		if ($day_of_year !== null and ( ! isset($fields['m']) or ! isset($fields['d'])))
++		{
++			$calendar = new \DateTimeImmutable(sprintf('%04d-01-01', $year));
++			if ($day_of_year < 0 or $day_of_year >= ($calendar->format('L') ? 366 : 365))
++			{
++				throw new \UnexpectedValueException('Input was not recognized by pattern.');
++			}
++			$calendar = $calendar->modify('+'.$day_of_year.' days');
++			// Fill only missing fields; explicit months and days take precedence.
++			isset($fields['m']) or $month = (int) $calendar->format('n');
++			isset($fields['d']) or $day = (int) $calendar->format('j');
++		}
++
++		$hour = isset($fields['H']) ? $fields['H'] : 0;
++		isset($fields['I']) and $hour = $fields['I'] % 12 + (isset($fields['p']) ? $fields['p'] * 12 : 0);
++		$minute = isset($fields['M']) ? $fields['M'] : 0;
++		$second = isset($fields['S']) ? $fields['S'] : 0;
++
++		// Let mktime normalize days beyond the end of the month and leap seconds.
++		$timestamp = mktime($hour, $minute, $second, $month, $day, $year <= 1900 ? 2000 : $year);
+ 
+ 		if ($timestamp === false)
+ 		{
+@@ -185,6 +222,323 @@
+ 		}
+ 
+ 		return static::forge($timestamp);
++	}
++
++	/**
++	 * Parses strptime fields for the caller to assemble into an mktime timestamp.
++	 *
++	 * Leaves missing fields for the caller to supply and permits unparsed trailing input.
++	 * Locale-specific composite patterns and month and weekday names come from LC_TIME.
++	 *
++	 * @param string $input Input string; consumed prefixes are removed by reference.
++	 * @param string $pattern strptime pattern.
++	 * @param array $fields Parsed fields, shared by reference when expanding composite patterns.
++	 * @param int $depth Composite expansion depth, used to reject recursive locale patterns.
++	 * @return bool Whether the input matches the pattern.
++	 */
++	protected static function parse_time_fields(&$input, $pattern, array &$fields, $depth = 0)
++	{
++		if ($depth > 10)
++		{
++			return false;
++		}
++
++		$composites = array(
++			'c' => nl_langinfo(D_T_FMT), 'x' => nl_langinfo(D_FMT),
++			'X' => nl_langinfo(T_FMT), 'r' => nl_langinfo(T_FMT_AMPM),
++			'D' => '%m/%d/%y', 'F' => '%Y-%m-%d', 'R' => '%H:%M', 'T' => '%H:%M:%S',
++		);
++		$numbers = array(
++			'Y' => array(4, 0, 9999), 'y' => array(2, 0, 99), 'C' => array(2, 0, 99),
++			'm' => array(2, 1, 12), 'd' => array(2, 1, 31), 'e' => array(2, 1, 31),
++			'H' => array(2, 0, 23), 'k' => array(2, 0, 23),
++			'I' => array(2, 1, 12), 'l' => array(2, 1, 12),
++			'M' => array(2, 0, 59), 'S' => array(2, 0, 61), 'j' => array(3, 1, 366),
++			'w' => array(1, 0, 6), 'u' => array(1, 1, 7),
++			'U' => array(2, 0, 53), 'W' => array(2, 0, 53), 'V' => array(2, 0, 53),
++			'G' => array(4, 0, 9999), 'g' => array(2, 0, 99),
++		);
++		$locale = preg_replace('/\.[^@]+/', '', setlocale(LC_TIME, 0));
++		$japanese = \Locale::getPrimaryLanguage($locale) === 'ja';
++		preg_match_all('/%([EO]?)(.)|([\s]+)|([^%\s]+)|(%$)/s', $pattern, $tokens, PREG_SET_ORDER);
++		foreach ($tokens as $token)
++		{
++			if (isset($token[3]) and $token[3] !== '')
++			{
++				$input = ltrim($input, " \t\n\r\v\f");
++				continue;
++			}
++			if (isset($token[4]) and $token[4] !== '')
++			{
++				if (strncmp($input, $token[4], strlen($token[4])) !== 0)
++				{
++					return false;
++				}
++				$input = substr($input, strlen($token[4]));
++				continue;
++			}
++			if ( ! isset($token[2]) or $token[2] === '')
++			{
++				return false;
++			}
++
++			$modifier = $token[1];
++			$code = $token[2];
++			if (($modifier === 'E' and strpos('cCxXyY', $code) === false) or
++				($modifier === 'O' and strpos('deHImMSuUVwWy', $code) === false))
++			{
++				return false;
++			}
++			// Use OS era patterns and let ICU map Japanese era names to their starting years.
++			if ($modifier === 'E' and nl_langinfo(ERA) !== '')
++			{
++				$era_formats = array('c' => ERA_D_T_FMT, 'x' => ERA_D_FMT, 'X' => ERA_T_FMT);
++				if (isset($era_formats[$code]) and nl_langinfo($era_formats[$code]) !== '')
++				{
++					if ( ! static::parse_time_fields($input, nl_langinfo($era_formats[$code]), $fields, $depth + 1))
++					{
++						return false;
++					}
++					continue;
++				}
++				if ($japanese and strpos('CyY', $code) !== false and
++					($code === 'y' or ! preg_match('/^[0-9]/', $input)))
++				{
++					if ( ! static::parse_era_fields($input, $code, $fields))
++					{
++						return false;
++					}
++					continue;
++				}
++			}
++			if (isset($composites[$code]))
++			{
++				if ( ! static::parse_time_fields($input, $composites[$code], $fields, $depth + 1))
++				{
++					return false;
++				}
++				continue;
++			}
++			if ($code === 'n' or $code === 't')
++			{
++				$input = ltrim($input, " \t\n\r\v\f");
++				continue;
++			}
++			if ($code === '%')
++			{
++				if (substr($input, 0, 1) !== '%')
++				{
++					return false;
++				}
++				$input = substr($input, 1);
++				continue;
++			}
++
++			if (isset($numbers[$code]))
++			{
++				$input = ltrim($input, " \t\n\r\v\f");
++				$limits = $numbers[$code];
++				$localized = false;
++				// Accept only canonical ICU spellings of Japanese numbers from 0 to 99.
++				if ($modifier === 'O' and $japanese and ! preg_match('/^[0-9]/', $input))
++				{
++					$formatter = new \NumberFormatter($locale, \NumberFormatter::SPELLOUT);
++					$position = 0;
++					$number = $formatter->parse($input, \NumberFormatter::TYPE_INT64, $position);
++					$matched = mb_substr($input, 0, $position, 'UTF-8');
++					if ($number === false or $number < 0 or $number > 99 or $formatter->format($number) !== $matched)
++					{
++						return false;
++					}
++					$input = mb_substr($input, $position, null, 'UTF-8');
++					$match = array((string) $number);
++					$localized = true;
++				}
++				if ( ! $localized and ! preg_match('/^[0-9]{1,'.$limits[0].'}/', $input, $match))
++				{
++					return false;
++				}
++				if ( ! $localized)
++				{
++					// Match libc's digit consumption, leaving excess digits for the next specifier.
++					$value = 0;
++					$consumed = '';
++					foreach (str_split($match[0]) as $digit)
++					{
++						if ($consumed !== '' and $value * 10 > $limits[2])
++						{
++							break;
++						}
++						$value = $value * 10 + (int) $digit;
++						$consumed .= $digit;
++					}
++					$match[0] = $consumed;
++				}
++				$value = (int) $match[0];
++				if ($value < $limits[1] or $value > $limits[2])
++				{
++					return false;
++				}
++				$localized or $input = substr($input, strlen($match[0]));
++				$fields[$code] = $value;
++				if ($code === 'Y')
++				{
++					unset($fields['y']);
++				}
++				if ($code === 'y' and isset($fields['era']))
++				{
++					$era_year = (string) $value;
++					if ( ! static::parse_era_fields($era_year, 'y', $fields))
++					{
++						return false;
++					}
++				}
++				// Normalize day/hour aliases; a 24-hour value overrides an earlier 12-hour value.
++				$aliases = array('e' => 'd', 'k' => 'H', 'l' => 'I');
++				isset($aliases[$code]) and $fields[$aliases[$code]] = $value;
++				if ($code === 'H' or $code === 'k')
++				{
++					unset($fields['I']);
++				}
++				continue;
++			}
++
++			if (strpos('aAbBhBp', $code) !== false)
++			{
++				$names = array();
++				if ($code === 'p')
++				{
++					$names[nl_langinfo(AM_STR)] = 0;
++					$names[nl_langinfo(PM_STR)] = 1;
++				}
++				else
++				{
++					$month = strpos('bBh', $code) !== false;
++					$english = explode(' ', $month
++						? 'January February March April May June July August September October November December'
++						: 'Sunday Monday Tuesday Wednesday Thursday Friday Saturday');
++					foreach ($english as $index => $name)
++					{
++						$value = $month ? $index + 1 : $index;
++						$names[$name] = $value;
++						$names[substr($name, 0, 3)] = $value;
++						$names[nl_langinfo(($month ? MON_1 : DAY_1) + $index)] = $value;
++						$names[nl_langinfo(($month ? ABMON_1 : ABDAY_1) + $index)] = $value;
++					}
++				}
++				uksort($names, function ($left, $right)
++				{
++					return strlen($right) - strlen($left);
++				});
++				$matched = false;
++				foreach ($names as $name => $value)
++				{
++					if (preg_match('~^'.preg_quote($name, '~').'~iu', $input, $match))
++					{
++						$fields[$code === 'p' ? 'p' : ($month ? 'm' : 'w')] = $value;
++						$input = substr($input, strlen($match[0]));
++						$matched = true;
++						break;
++					}
++				}
++				if ( ! $matched)
++				{
++					return false;
++				}
++				continue;
++			}
++
++			// Fuel does not pass parsed UTC offsets to mktime, so no timezone field is stored.
++			if ($code === 'Z')
++			{
++				continue;
++			}
++			if ($code === 'z' and preg_match('/^(?:Z|[+-][0-9]{2}:?[0-9]{2})/', $input, $match))
++			{
++				if ($match[0] !== 'Z' and (int) substr($match[0], -2) > 59)
++				{
++					return false;
++				}
++				$input = substr($input, strlen($match[0]));
++				continue;
++			}
++			if ($code === 's' and preg_match('/^[0-9]+/', $input, $match))
++			{
++				$timestamp = (int) $match[0];
++				foreach (array('Y' => 'Y', 'm' => 'n', 'd' => 'j', 'H' => 'G', 'M' => 'i', 'S' => 's') as $field => $format)
++				{
++					$fields[$field] = (int) date($format, $timestamp);
++				}
++				$input = substr($input, strlen($match[0]));
++				continue;
++			}
++			return false;
++		}
++
++		return true;
++	}
++
++	/**
++	 * Parses Japanese era names and years into a calendar year for the date fields.
++	 *
++	 * ICU supplies era starting years; %EY accepts the first-year name as year 1.
++	 * An unspecified era year defaults to 1; an unspecified era defaults to the current era.
++	 *
++	 * @param string $input Input string; consumed prefixes are removed by reference.
++	 * @param string $code C for the era name, y for the era year, or Y for both.
++	 * @param array $fields Era name, era year and Gregorian year, updated by reference.
++	 * @return bool Whether the era specifier was parsed successfully.
++	 */
++	protected static function parse_era_fields(&$input, $code, array &$fields)
++	{
++		$formatter = new \IntlDateFormatter(
++			'ja_JP@calendar=japanese', \IntlDateFormatter::NONE, \IntlDateFormatter::NONE,
++			date_default_timezone_get(), \IntlDateFormatter::TRADITIONAL, 'GGGG'
++		);
++		if ($code === 'C' or $code === 'Y')
++		{
++			$position = 0;
++			if ($formatter->parse($input, $position) === false or $position === 0)
++			{
++				return false;
++			}
++			$fields['era'] = mb_substr($input, 0, $position, 'UTF-8');
++			$input = mb_substr($input, $position, null, 'UTF-8');
++		}
++		if ($code === 'y' or $code === 'Y')
++		{
++			if ( ! preg_match($code === 'Y' ? '/^(元|[0-9]{1,4})/' : '/^[0-9]{1,4}/', $input, $match))
++			{
++				return false;
++			}
++			$fields['era_year'] = $match[0] === '元' ? 1 : (int) $match[0];
++			if ($fields['era_year'] < 1)
++			{
++				return false;
++			}
++			$input = substr($input, strlen($match[0]));
++			if ($code === 'Y')
++			{
++				if (substr($input, 0, strlen('年')) !== '年')
++				{
++					return false;
++				}
++				$input = substr($input, strlen('年'));
++			}
++		}
++
++		$era = isset($fields['era']) ? $fields['era'] : $formatter->format(time());
++		$year = isset($fields['era_year']) ? $fields['era_year'] : 1;
++		$formatter->setPattern('GGGGy');
++		$timestamp = $formatter->parse($era.$year);
++		if ($timestamp === false)
++		{
++			return false;
++		}
++		$fields['Y'] = (int) date('Y', $timestamp);
++		unset($fields['y'], $fields['C']);
++
++		return true;
+ 	}
+ 
+ 	/**
+@@ -322,38 +676,358 @@
+ 	}
+ 
+ 	/**
+-	 * Returns the date formatted according to the current locale
+-	 *
+-	 * @param   string	$pattern_key  either a named pattern from date config file or a pattern, defaults to 'local'
+-	 * @param   mixed 	$timezone     vald timezone, or if true, output the time in local time instead of system time
+-	 * @return  string
++	 * Formats the date with a strftime pattern, LC_TIME and the selected timezone.
++	 *
++	 * Resolves configured pattern names and requires ext-intl for ICU era and number formatting.
++	 * Japanese era boundaries follow ICU; the first era year is numeric and zero-padded by default.
++	 *
++	 * @param string $pattern_key Pattern name in the date configuration, or a strftime pattern.
++	 * @param mixed $timezone Timezone name; true uses the display timezone, other non-string values use the instance timezone.
++	 * @return string|false Formatted date, or false for empty patterns/results or output of 4096 bytes or more.
++	 * @throws \RuntimeException If ICU formatting fails or %s encounters an unsupported TZ format.
+ 	 */
+ 	public function format($pattern_key = 'local', $timezone = null)
+ 	{
+ 		\Config::load('date', 'date');
+-
+ 		$pattern = \Config::get('date.patterns.'.$pattern_key, $pattern_key);
+-
+-		// determine the timezone to switch to
+ 		$timezone === true and $timezone = static::$display_timezone;
+ 		is_string($timezone) or $timezone = $this->timezone;
+ 
+-		// Temporarily change timezone when different from default
+-		if (\Fuel::$timezone != $timezone)
+-		{
+-			date_default_timezone_set($timezone);
+-		}
+-
+-		// Create output
+-		$output = strftime($pattern, $this->timestamp);
+-
+-		// Change timezone back to default if changed previously
+-		if (\Fuel::$timezone != $timezone)
+-		{
+-			date_default_timezone_set(\Fuel::$timezone);
+-		}
+-
+-		return $output;
++		// Stop at the first NUL byte, as libc does.
++		$pattern = explode("\0", $pattern, 2)[0];
++		if ($pattern === '')
++		{
++			return false;
++		}
++
++		// Convert to the output timezone without changing global timezone settings.
++		$date = new \DateTimeImmutable('@'.(int) $this->timestamp);
++		$date = $date->setTimezone(new \DateTimeZone($timezone));
++		try
++		{
++			$output = static::strftime_expand($pattern, $date);
++		}
++		catch (\LengthException $error)
++		{
++			// Match PHP 7.4 strftime's limit: output of 4096 bytes or more returns false.
++			return false;
++		}
++		return $output === '' ? false : $output;
++	}
++
++	/**
++	 * Expands composite patterns and applies case conversion and padding to each specifier.
++	 *
++	 * @param string $pattern strftime pattern to expand.
++	 * @param \DateTimeImmutable $date Date already converted to the output timezone.
++	 * @return string Expanded pattern.
++	 * @throws \LengthException If a requested width or the output reaches 4096 bytes.
++	 */
++	protected static function strftime_expand($pattern, \DateTimeImmutable $date)
++	{
++		$expression = '/%([_0^#-]*)([1-9][0-9]*)?([EO]?)(.)?/s';
++		$convert = function ($match) use ($date)
++		{
++			$flags = $match[1];
++			$width = isset($match[2]) ? (int) $match[2] : 0;
++			if ($width >= 4096)
++			{
++				throw new \LengthException('Date output exceeds the strftime limit.');
++			}
++			$modifier = isset($match[3]) ? $match[3] : '';
++			$code = isset($match[4]) ? $match[4] : '';
++			$padding = null;
++			foreach (str_split($flags) as $flag)
++			{
++				if ($flag !== '' and strpos('_-0', $flag) !== false)
++				{
++					$padding = $flag;
++				}
++			}
++
++			// Preserve unknown specifiers and modifiers, applying any width padding as glibc does.
++			$valid = $modifier === ''
++				|| ($modifier === 'E' and $code !== '' and strpos('cCnpPrRsTtuxXyYzZ%', $code) !== false)
++				|| ($modifier === 'O' and $code !== '' and strpos('bBCdegGhHIjklmMnpPrRsStTuUVwWyzZ%', $code) !== false);
++			$value = $valid ? static::strftime_value($code, $date) : null;
++			if ($valid and $modifier !== '')
++			{
++				$value = static::strftime_localized($modifier, $code, $date, $value, $padding);
++			}
++			if ($value === null)
++			{
++				return str_pad($match[0], $width, $padding === '0' ? '0' : ' ', STR_PAD_LEFT);
++			}
++
++			list($text, $digits, $default_padding) = $value;
++			if (strpos($flags, '^') !== false and $code !== 'P')
++			{
++				$text = strtoupper($text);
++			}
++			if (strpos($flags, '#') !== false)
++			{
++				if (strpos('aAbBh', $code) !== false)
++				{
++					$text = strtoupper($text);
++				}
++				elseif (strpos('pPZ', $code) !== false)
++				{
++					$text = strtolower($text);
++				}
++			}
++
++			// Keep the numeric default width separate from the caller's minimum width.
++			$pad = $padding === null ? $default_padding : ($padding === '0' ? '0' : ' ');
++			$size = $padding === '-' ? $width : max($digits, $width);
++			if ($code === 'z' and $digits !== 0)
++			{
++				$sign = substr($text, 0, 1);
++				$text = $sign.str_pad(substr($text, 1), $size, $pad, STR_PAD_LEFT);
++				return str_repeat($padding === '0' ? '0' : ' ', max(0, $width - 1)).$text;
++			}
++			if (($digits or in_array($code, array('Y', 'C', 'G'), true)) and isset($text[0]) and $text[0] === '-' and $pad === '0')
++			{
++				return '-'.str_pad(substr($text, 1), max(0, $size - 1), $pad, STR_PAD_LEFT);
++			}
++
++			return str_pad($text, $size, $pad, STR_PAD_LEFT);
++		};
++
++		// Enforce the output limit across literals and all expanded specifiers.
++		$length = strlen(preg_replace($expression, '', $pattern));
++		if ($length >= 4096)
++		{
++			throw new \LengthException('Date output exceeds the strftime limit.');
++		}
++		return preg_replace_callback($expression, function ($match) use ($convert, &$length)
++		{
++			$text = $convert($match);
++			$length += strlen($text);
++			if ($length >= 4096)
++			{
++				throw new \LengthException('Date output exceeds the strftime limit.');
++			}
++			return $text;
++		}, $pattern);
++	}
++
++	/**
++	 * Resolves a specifier to its unpadded value, default width and padding character.
++	 *
++	 * @param string $code Conversion specifier without the percent sign or modifier.
++	 * @param \DateTimeImmutable $date Date to format.
++	 * @return array|null Value, default width and padding character, or null for an unknown specifier.
++	 * @throws \RuntimeException If the process TZ format used by %s is unsupported.
++	 */
++	protected static function strftime_value($code, \DateTimeImmutable $date)
++	{
++		$number_formats = array(
++			'd' => 'j', 'e' => 'j', 'H' => 'G', 'k' => 'G',
++			'I' => 'g', 'l' => 'g', 'm' => 'n', 'M' => 'i',
++			'S' => 's', 'u' => 'N', 'w' => 'w', 'V' => 'W',
++		);
++		if (isset($number_formats[$code]))
++		{
++			return array((string) (int) $date->format($number_formats[$code]), strpos('uw', $code) === false ? 2 : 1, strpos('ekl', $code) === false ? '0' : ' ');
++		}
++
++		// Preserve OS locale names and composite patterns by reading LC_TIME directly.
++		$names = array(
++			'a' => ABDAY_1 + (int) $date->format('w'),
++			'A' => DAY_1 + (int) $date->format('w'),
++			'b' => ABMON_1 + (int) $date->format('n') - 1,
++			'h' => ABMON_1 + (int) $date->format('n') - 1,
++			'B' => MON_1 + (int) $date->format('n') - 1,
++			'p' => (int) $date->format('G') < 12 ? AM_STR : PM_STR,
++			'P' => (int) $date->format('G') < 12 ? AM_STR : PM_STR,
++		);
++		if (isset($names[$code]))
++		{
++			$text = nl_langinfo($names[$code]);
++			return array($code === 'P' ? strtolower($text) : $text, 0, ' ');
++		}
++
++		$composites = array(
++			'c' => nl_langinfo(D_T_FMT), 'x' => nl_langinfo(D_FMT),
++			'X' => nl_langinfo(T_FMT), 'r' => nl_langinfo(T_FMT_AMPM) ?: '%I:%M:%S %p',
++			'D' => '%m/%d/%y', 'F' => '%Y-%m-%d',
++			'R' => '%H:%M', 'T' => '%H:%M:%S',
++		);
++		if (isset($composites[$code]))
++		{
++			return array(static::strftime_expand($composites[$code], $date), 0, ' ');
++		}
++
++		$year = (int) $date->format('Y');
++		switch ($code)
++		{
++			case 'j':
++				return array((string) ((int) $date->format('z') + 1), 3, '0');
++			case 'U':
++			case 'W':
++				$weekday = $code === 'U' ? (int) $date->format('w') : (int) $date->format('N') - 1;
++				return array((string) intdiv((int) $date->format('z') + 7 - $weekday, 7), 2, '0');
++			case 'Y':
++				return array((string) $year, 0, '0');
++			case 'C':
++				return array((string) (int) floor($year / 100), 0, '0');
++			case 'G':
++				return array((string) (int) $date->format('o'), 0, '0');
++			case 'y':
++			case 'g':
++				$year = $code === 'g' ? (int) $date->format('o') : $year;
++				return array((string) (($year % 100 + 100) % 100), 2, '0');
++			case 's':
++				// glibc mktime uses the process TZ rather than PHP's timezone setting.
++				$system_zone = static::strftime_system_timezone();
++				if (is_int($system_zone))
++				{
++					// A fixed offset has no DST period to satisfy tm_isdst=1.
++					$timestamp = $date->format('I') === '1' ? -1 : $date->getTimestamp() + (int) $date->format('Z') - $system_zone;
++					return array((string) $timestamp, 0, ' ');
++				}
++				$local = new \DateTimeImmutable($date->format('Y-m-d H:i:s'), $system_zone);
++				$timestamp = $local->getTimestamp();
++				if ($date->format('I') !== $local->format('I'))
++				{
++					// Match glibc's -1 result if no period in the search range has the requested DST state.
++					$timestamp = -1;
++					$radius = 268828200;
++					$transitions = $local->getTimezone()->getTransitions($local->getTimestamp() - $radius, $local->getTimestamp() + $radius);
++					foreach ($transitions ?: array() as $transition)
++					{
++						if ((int) $transition['isdst'] === (int) $date->format('I'))
++						{
++							$timestamp = $date->getTimestamp() + (int) $date->format('Z') - $transition['offset'];
++							break;
++						}
++					}
++				}
++				return array((string) $timestamp, 0, ' ');
++			case 'z':
++				$offset = (int) $date->format('Z');
++				$hours_minutes = intdiv(abs($offset), 3600) * 100 + intdiv(abs($offset) % 3600, 60);
++				return array(($offset < 0 ? '-' : '+').$hours_minutes, 4, '0');
++			case 'Z':
++				return array($date->format('T'), 0, ' ');
++			case 'n':
++				return array("\n", 0, ' ');
++			case 't':
++				return array("\t", 0, ' ');
++			case '%':
++				return array('%', 0, ' ');
++		}
++
++		return null;
++	}
++
++	/**
++	 * Uses ICU for era and alternative number formats, preserving ordinary LC_TIME values.
++	 *
++	 * Japanese era years default to a minimum of two digits; era boundaries follow ICU.
++	 * Alternative numbers cover 0-99, matching glibc's table; larger values retain Arabic digits.
++	 *
++	 * @param string $modifier E for eras or O for alternative numbers.
++	 * @param string $code Conversion specifier following the modifier.
++	 * @param \DateTimeImmutable $date Date to format.
++	 * @param array|null $value Ordinary value, default width and padding character.
++	 * @param string|null $padding Explicit padding flag; null uses the default zero padding for era years.
++	 * @return array|null Localized value, default width and padding character.
++	 * @throws \RuntimeException If ICU formatting fails.
++	 */
++	protected static function strftime_localized($modifier, $code, \DateTimeImmutable $date, $value, $padding)
++	{
++		$locale = preg_replace('/\.[^@]+/', '', setlocale(LC_TIME, 0));
++		$japanese = \Locale::getPrimaryLanguage($locale) === 'ja';
++		if ($modifier === 'E' and nl_langinfo(ERA) !== '')
++		{
++			// Use OS era patterns to preserve the locale's field order and separators.
++			$formats = array('c' => ERA_D_T_FMT, 'x' => ERA_D_FMT, 'X' => ERA_T_FMT);
++			if (isset($formats[$code]) and ($pattern = nl_langinfo($formats[$code])) !== '')
++			{
++				return array(static::strftime_expand($pattern, $date), 0, ' ');
++			}
++			$patterns = array('C' => 'GGGG', 'y' => 'y', 'Y' => 'GGGG|y');
++			if (isset($patterns[$code]))
++			{
++				$formatter = new \IntlDateFormatter(
++					$japanese ? $locale.'@calendar=japanese' : $locale,
++					\IntlDateFormatter::NONE, \IntlDateFormatter::NONE,
++					$date->getTimezone()->getName(), \IntlDateFormatter::TRADITIONAL, $patterns[$code]
++				);
++				$text = $formatter->format($date->getTimestamp());
++				if ($text === false)
++				{
++					throw new \RuntimeException('ICU date formatting failed: '.$formatter->getErrorMessage());
++				}
++				if ($code === 'Y')
++				{
++					// ICU's yy truncates to two digits; pad the full year without truncating it.
++					list($era, $year) = explode('|', $text, 2);
++					$text = $era.str_pad($year, $padding === '-' ? 0 : 2, $padding === '_' ? ' ' : '0', STR_PAD_LEFT).($japanese ? '年' : '');
++				}
++				return array($text, $code === 'y' ? 2 : 0, $code === 'y' ? '0' : ' ');
++			}
++		}
++		if ($modifier === 'O' and $value !== null and nl_langinfo(ALT_DIGITS) !== ''
++			and $code !== '' and strpos('CdegGHIjklmMSuUVwWyz', $code) !== false)
++		{
++			$number = (int) $value[0];
++			if ($number >= 0 and $number < 100)
++			{
++				$formatter = new \NumberFormatter($japanese ? $locale.'@numbers=jpan' : $locale, \NumberFormatter::DECIMAL);
++				$text = $formatter->format($number);
++				if ($text === false)
++				{
++					throw new \RuntimeException('ICU number formatting failed: '.$formatter->getErrorMessage());
++				}
++				return array(($code === 'z' ? '+' : '').$text, 0, ' ');
++			}
++		}
++		return $value;
++	}
++
++	/**
++	 * Resolves the process TZ to a timezone or fixed offset for %s conversion.
++	 *
++	 * Accepts IANA names and POSIX names with fixed offsets and no DST rules.
++	 * POSIX DST rules and zoneinfo file paths are unsupported.
++	 *
++	 * @return \DateTimeZone|int Timezone or fixed offset in seconds east of UTC; defaults to UTC when TZ is unset or empty.
++	 * @throws \RuntimeException If TZ uses an unsupported format or an out-of-range offset.
++	 */
++	protected static function strftime_system_timezone()
++	{
++		$zone = getenv('TZ') ?: 'UTC';
++		// Discard libc's optional leading colon before parsing the name or fixed offset.
++		if (isset($zone[0]) and $zone[0] === ':')
++		{
++			$zone = substr($zone, 1);
++		}
++
++		if (preg_match('/\A(?:[A-Za-z]{3,}|<[A-Za-z0-9+\-]{3,}>)([+\-]?)([0-9]{1,2})(?::([0-9]{1,2})(?::([0-9]{1,2}))?)?\z/', $zone, $parts))
++		{
++			$hours = (int) $parts[2];
++			$minutes = isset($parts[3]) ? (int) $parts[3] : 0;
++			$seconds = isset($parts[4]) ? (int) $parts[4] : 0;
++			if ($hours > 24 or $minutes > 59 or $seconds > 59)
++			{
++				throw new \RuntimeException('POSIX TZ offset is outside the supported range.');
++			}
++
++			// Reverse the POSIX offset, which is added to local time to obtain UTC.
++			// Return seconds directly because PHP 7.4 DateTimeZone loses sub-minute precision.
++			return ($parts[1] === '-' ? 1 : -1) * ($hours * 3600 + $minutes * 60 + $seconds);
++		}
++
++		try
++		{
++			return new \DateTimeZone($zone);
++		}
++		catch (\Exception $error)
++		{
++			throw new \RuntimeException('Unsupported TZ for %s; use an IANA name or a fixed POSIX offset.', 0, $error);
++		}
+ 	}
+ 
+ 	/**
+--- a/classes/errorhandler.php
++++ b/classes/errorhandler.php
+@@ -155,8 +155,8 @@
+ 	 */
+ 	public static function error_handler($severity, $message, $filepath, $line)
+ 	{
+-		// don't do anything if error reporting is disabled
+-		if (error_reporting() !== 0)
++		// Check this severity: PHP 8 retains fatal-error bits in the mask even under @.
++		if (error_reporting() & $severity)
+ 		{
+ 			$fatal = (bool) ( ! in_array($severity, \Config::get('errors.continue_on', array())));
+ 
+--- a/classes/format.php
++++ b/classes/format.php
+@@ -197,7 +197,8 @@
+ 			}
+ 			else
+ 			{
+-				// add single node.
++				// Represent null as an empty XML element before applying string functions.
++				$value === null and $value = '';
+ 				$encoded = htmlspecialchars(html_entity_decode($value, ENT_QUOTES, 'UTF-8'), ENT_QUOTES, "UTF-8");
+ 
+ 				if ($use_cdata and ($encoded !== (string) $value))
+@@ -240,6 +241,8 @@
+ 			return 	implode($delimiter, array_map(function($item) use($enclosure, $escape, $delimiter, $enclose_numbers) {
+ 				if ( ! is_numeric($item) or $enclose_numbers)
+ 				{
++					// Represent null as an empty field before escaping and enclosing it.
++					$item === null and $item = '';
+ 					$item = $enclosure.str_replace($enclosure, $escape.$enclosure, $item).$enclosure;
+ 				}
+ 				return $item;
+--- a/classes/image/gd.php
++++ b/classes/image/gd.php
+@@ -80,13 +80,19 @@
+ 		$this->image_data = $image;
+ 	}
+ 
++	/**
++	 * Rotate the working image and fill uncovered areas with the background color.
++	 *
++	 * @param int|float $degrees Clockwise rotation angle in degrees.
++	 * @return void
++	 */
+ 	protected function _rotate($degrees)
+ 	{
+ 		extract(parent::_rotate($degrees));
+ 		$degrees = 360 - $degrees;
+ 		$bgcolor = $this->config['bgcolor'] !== null ? $this->config['bgcolor'] : '#000';
+ 		$color = $this->create_color($this->image_data, $bgcolor, 100);
+-		$this->image_data = imagerotate($this->image_data, $degrees, $color, false);
++		$this->image_data = imagerotate($this->image_data, $degrees, $color);
+ 	}
+ 
+ 	protected function _watermark($filename, $position, $padding = array(5,5))
+@@ -194,6 +200,14 @@
+ 		$this->image_data = $image;
+ 	}
+ 
++	/**
++	 * Apply transparency derived from mask luminance to the working image.
++	 *
++	 * @param string|resource|\GdImage $maskimage Path to a mask file, or an existing GD mask image.
++	 * @return void
++	 * @throws \OutOfBoundsException If the mask file cannot be found.
++	 * @throws \RuntimeException If the mask format cannot be loaded.
++	 */
+ 	protected function _mask($maskimage)
+ 	{
+ 		extract(parent::_mask($maskimage));
+@@ -204,7 +218,9 @@
+ 
+ 		// Create new blank image
+ 		$image = $this->create_transparent_image($sizes->width, $sizes->height);
+-		if (is_resource($maskimage))
++
++		// Reuse supplied GD images; load masks from disk only for file paths.
++		if (is_resource($maskimage) or $maskimage instanceof \GdImage)
+ 		{
+ 			$maskim = $maskimage;
+ 		}
+@@ -269,6 +285,11 @@
+ 		$br and $this->round_corner($this->image_data, $radius, $antialias, false, false);
+ 	}
+ 
++	/**
++	 * Convert the working image to grayscale using luminance derived from RGB values.
++	 *
++	 * @return void
++	 */
+ 	protected function _grayscale()
+ 	{
+ 		$sizes = $this->sizes();
+@@ -295,13 +316,19 @@
+ 					continue;
+ 				}
+ 
+-				// Now set the color
+-				$shade = (($red*0.299)+($green*0.587)+($blue*0.114));
++				// Preserve truncation when mapping luminance to a palette index.
++				$shade = (int) (($red*0.299)+($green*0.587)+($blue*0.114));
+ 				imagesetpixel($this->image_data, $x, $y, $bwpalette[$shade]);
+ 			}
+ 		}
+ 	}
+ 
++	/**
++	 * Get dimensions from a GD image or an image file.
++	 *
++	 * @param string|resource|\GdImage|null $filename Image path or GD image; null selects the current image.
++	 * @return \stdClass Image dimensions in the width and height properties.
++	 */
+ 	public function sizes($filename = null)
+ 	{
+ 		if (empty($filename) && !empty($this->image_fullpath))
+@@ -309,12 +336,13 @@
+ 			$filename = $this->image_fullpath;
+ 		}
+ 
+-		if ($filename == $this->image_fullpath && is_resource($this->image_data))
++		// Use the working image dimensions to include transformations already applied in memory.
++		if ($filename == $this->image_fullpath && (is_resource($this->image_data) or $this->image_data instanceof \GdImage))
+ 		{
+ 			$width  = imagesx($this->image_data);
+ 			$height = imagesy($this->image_data);
+ 		}
+-		elseif (is_resource($filename))
++		elseif (is_resource($filename) or $filename instanceof \GdImage)
+ 		{
+ 			$width  = imagesx($filename);
+ 			$height = imagesy($filename);
+@@ -430,12 +458,12 @@
+ 	}
+ 
+ 	/**
+-	 * Creates a new transparent image.
+-	 *
+-	 * @param  integer   $width     The width of the image.
+-	 * @param  integer   $height    The height of the image.
+-	 * @param  resource  $resource  Optionally add an image to the new transparent image.
+-	 * @return resource  Returns the image in resource form.
++	 * Create a transparent canvas and optionally copy pixels from a GD image.
++	 *
++	 * @param integer $width Canvas width in pixels.
++	 * @param integer $height Canvas height in pixels.
++	 * @param resource|\GdImage|null $resource Source image to copy; null leaves the canvas empty.
++	 * @return resource|\GdImage The created GD image.
+ 	 */
+ 	protected function create_transparent_image($width, $height, $resource = null)
+ 	{
+@@ -460,7 +488,8 @@
+ 		imagefilledrectangle($image, 0, 0, $width, $height, $color);
+ 		imagealphablending($image, true);
+ 
+-		if (is_resource($resource))
++		// Copy source pixels after initializing the canvas and its alpha settings.
++		if (is_resource($resource) or $resource instanceof \GdImage)
+ 		{
+ 			imagecopy($image, $resource, 0, 0, 0, 0, $width, $height);
+ 		}
+@@ -468,13 +497,14 @@
+ 	}
+ 
+ 	/**
+-	 * Creates a rounded corner on the image.
+-	 *
+-	 * @param  resource  $image
+-	 * @param  integer   $radius
+-	 * @param  integer   $antialias
+-	 * @param  boolean   $top
+-	 * @param  boolean   $left
++	 * Round one corner by updating the alpha values of its pixels in place.
++	 *
++	 * @param resource|\GdImage $image Image to modify.
++	 * @param integer $radius Corner radius in pixels.
++	 * @param integer $antialias Width of the antialiasing band in pixels.
++	 * @param boolean $top True for a top corner, false for a bottom corner.
++	 * @param boolean $left True for a left corner, false for a right corner.
++	 * @return void
+ 	 */
+ 	protected function round_corner(&$image, $radius, $antialias, $top, $left)
+ 	{
+@@ -512,14 +542,14 @@
+ 						}
+ 						else
+ 						{
+-							// Get color information from this spot on the image
++							// Preserve truncation when converting edge alpha values to GD integers.
+ 							$rgba = imagecolorat($image, $x + $offsetX, $y + $offsetY);
+ 							$tmpColor = imagecolorallocatealpha(
+ 								$image,
+ 								($rgba >> 16) & 0xFF, // Red
+ 								($rgba >> 8) & 0xFF, // Green
+ 								$rgba & 0xFF, // Blue
+-								(127 - (($rgba >> 24) & 0xFF)) * ($fromCirc / $antialias) // Alpha
++								(int) ((127 - (($rgba >> 24) & 0xFF)) * ($fromCirc / $antialias))
+ 							);
+ 							imagesetpixel($image, $x + $offsetX, $y + $offsetY, $tmpColor);
+ 						}
+--- a/classes/input/instance.php
++++ b/classes/input/instance.php
+@@ -446,8 +446,8 @@
+ 		// get the input method and unify it
+ 		$method = strtolower($this->method());
+ 
+-		// get the content type from the header, strip optional parameters
+-		$content_header = \Input::headers('Content-Type');
++		// An absent Content-Type leaves the body format unspecified; use a string for parsing.
++		$content_header = \Input::headers('Content-Type', '');
+ 		if (($content_type = strstr($content_header, ';', true)) === false)
+ 		{
+ 			$content_type = $content_header;
+--- a/classes/input.php
++++ b/classes/input.php
+@@ -119,7 +119,7 @@
+ 			});
+ 
+ 			$ips = array_filter($ips, function($ip) use($exclude_reserved) {
+-				return filter_var($ip, FILTER_VALIDATE_IP, $exclude_reserved ? FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE : null);
++				return filter_var($ip, FILTER_VALIDATE_IP, $exclude_reserved ? FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE : 0);
+ 			});
+ 
+ 			if ($ips)
+--- a/classes/model/crud.php
++++ b/classes/model/crud.php
+@@ -12,6 +12,11 @@
+ 
+ namespace Fuel\Core;
+ 
++/**
++ * Represent a table row as model properties with save, delete and array access operations.
++ *
++ * Subclasses define table settings and validation rules; the database layer executes SQL.
++ */
+ class Model_Crud extends \Model implements \Iterator, \ArrayAccess, \Serializable, \Sanitization
+ {
+ 	/**
+@@ -724,14 +729,22 @@
+ 	}
+ 
+ 	/**
+-	 * Implementation of the Iterator interface
+-	 */
+-
++	 * Rewind iteration to the first model property.
++	 *
++	 * @return void
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function rewind()
+ 	{
+ 		reset($this->_data);
+ 	}
+ 
++	/**
++	 * Return the current property value, applying the output filter if enabled.
++	 *
++	 * @return mixed Current value, or false past the end, with output filtering applied if enabled.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function current()
+ 	{
+ 		if ($this->_sanitization_enabled)
+@@ -741,11 +754,23 @@
+ 		return current($this->_data);
+ 	}
+ 
++	/**
++	 * Return the key of the current model property.
++	 *
++	 * @return int|string|null Current key, or null past the end.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function key()
+ 	{
+ 		return key($this->_data);
+ 	}
+ 
++	/**
++	 * Advance to the next property and return its value, applying the output filter if enabled.
++	 *
++	 * @return mixed Next value, or false past the end, with output filtering applied if enabled.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function next()
+ 	{
+ 		if ($this->_sanitization_enabled)
+@@ -755,51 +780,62 @@
+ 		return next($this->_data);
+ 	}
+ 
++	/**
++	 * Check whether the iterator points to a model property.
++	 *
++	 * @return bool True if the current key exists.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function valid()
+ 	{
+ 		return key($this->_data) !== null;
+ 	}
+ 
+ 	/**
+-	 * Sets the value of the given offset (class property).
+-	 *
+-	 * @param   string  $offset  class property
+-	 * @param   string  $value   value
++	 * Set a model property through array access.
++	 *
++	 * @param   int|string|null  $offset  Property name; null becomes an empty-string key.
++	 * @param   mixed  $value  Value to assign.
+ 	 * @return  void
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetSet($offset, $value)
+ 	{
+ 		$this->_data[$offset] = $value;
+ 	}
+ 
+ 	/**
+-	 * Checks if the given offset (class property) exists.
+-	 *
+-	 * @param   string  $offset  class property
+-	 * @return  bool
+-	 */
++	 * Check whether a model property exists, including properties whose value is null.
++	 *
++	 * @param   int|string|null  $offset  Property name.
++	 * @return  bool  True if the property exists.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetExists($offset)
+ 	{
+ 		return array_key_exists($offset, $this->_data);
+ 	}
+ 
+ 	/**
+-	 * Unsets the given offset (class property).
+-	 *
+-	 * @param   string  $offset  class property
++	 * Remove a model property through array access.
++	 *
++	 * @param   int|string|null  $offset  Property name.
+ 	 * @return  void
+ 	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetUnset($offset)
+ 	{
+ 		unset($this->_data[$offset]);
+ 	}
+ 
+ 	/**
+-	 * Gets the value of the given offset (class property).
+-	 *
+-	 * @param   string  $offset  class property
+-	 * @return  mixed
+-	 */
++	 * Return a model property value, applying the output filter if enabled.
++	 *
++	 * @param   int|string|null  $offset  Property name.
++	 * @return  mixed  Property value.
++	 * @throws  \OutOfBoundsException  If the property does not exist.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetGet($offset)
+ 	{
+ 		if (array_key_exists($offset, $this->_data))
+@@ -949,30 +985,109 @@
+ 	}
+ 
+ 	/**
+-	 * Serializable implementation: serialize
+-	 *
+-	 * @return  array  model data
+-	 */
+-	public function serialize()
+-	{
++	 * Return model data for PHP object serialization.
++	 *
++	 * The default array payload preserves references between model properties and external objects.
++	 * Subclasses overriding either Serializable method use their custom serialization format.
++	 * To support circular references or references shared with external objects in a custom format,
++	 * subclasses must implement __serialize() and __unserialize() with an array payload.
++	 *
++	 * @return array The data key contains model properties and state, or the subclass's serialized string.
++	 * @throws \RuntimeException If custom serialization recursively visits the same model.
++	 */
++	public function __serialize()
++	{
++		// Use the Serializable method pair even when only one method is overridden.
++		$serializer = new \ReflectionMethod($this, 'serialize');
++		$unserializer = new \ReflectionMethod($this, 'unserialize');
++		if ($serializer->getDeclaringClass()->getName() !== __CLASS__ or
++			$unserializer->getDeclaringClass()->getName() !== __CLASS__)
++		{
++			// Nested custom serialization cannot rely on PHP to resolve a reference back to this model.
++			static $serializing = array();
++			$id = spl_object_hash($this);
++			if (isset($serializing[$id]))
++			{
++				throw new \RuntimeException('Recursive custom serialization requires __serialize() and __unserialize() in '.get_class($this).'.');
++			}
++			$serializing[$id] = true;
++			try
++			{
++				return array('data' => $this->serialize());
++			}
++			finally
++			{
++				// Clear the recursion guard even if the subclass throws, so later serialization can proceed.
++				unset($serializing[$id]);
++			}
++		}
++
+ 		$data = $this->_data;
+-
+ 		$data['_is_new'] = $this->_is_new;
+ 		$data['_is_frozen'] = $this->_is_frozen;
+ 
++		return array('data' => $data);
++	}
++
++	/**
++	 * Restore a model from PHP object serialization.
++	 *
++	 * Restore array payloads directly and delegate custom strings to unserialize().
++	 *
++	 * @param array $data Array returned by __serialize().
++	 * @return void
++	 */
++	public function __unserialize($data)
++	{
++		if (is_array($data['data']))
++		{
++			$this->restore_serialized_data($data['data']);
++		}
++		else
++		{
++			$this->unserialize($data['data']);
++		}
++	}
++
++	/**
++	 * Serialize model properties and the new/frozen flags for Serializable.
++	 *
++	 * @return string Serialized model properties and state.
++	 */
++	public function serialize()
++	{
++		$data = $this->_data;
++
++		$data['_is_new'] = $this->_is_new;
++		$data['_is_frozen'] = $this->_is_frozen;
++
+ 		return serialize($data);
+ 	}
+ 
+ 	/**
+-	 * Serializable implementation: unserialize
+-	 *
+-	 * @param   string  $data
+-	 * @return  array   model data
++	 * Restore properties and frozen state for legacy Serializable payloads or direct calls.
++	 *
++	 * A non-null _is_new entry leaves the internal new-record flag unchanged.
++	 *
++	 * @param   string  $data  Serialized string produced by serialize().
++	 * @return  void
+ 	 */
+ 	public function unserialize($data)
+ 	{
+-		$data = unserialize($data);
+-
++		$this->restore_serialized_data(unserialize($data));
++	}
++
++	/**
++	 * Restore model properties and frozen state from a decoded payload.
++	 *
++	 * A non-null _is_new entry leaves the internal new-record flag unchanged; otherwise it resets to true.
++	 * Remove non-null state entries before assigning the remaining values as model properties.
++	 *
++	 * @param array $data Model properties and state.
++	 * @return void
++	 */
++	protected function restore_serialized_data($data)
++	{
+ 		if (isset($data['_is_new']))
+ 		{
+ 			$this->is_new = $data['_is_new'];
+--- a/classes/request.php
++++ b/classes/request.php
+@@ -181,6 +181,12 @@
+ 	 */
+ 	protected $input = null;
+ 
++	/** @var mixed Request body managed by the REST controller. */
++	public $body = null;
++
++	/** @var array|string|null Request language detected by the REST controller. */
++	public $lang = null;
++
+ 	/**
+ 	 * @var  string  $method  request method
+ 	 */
+--- a/classes/security.php
++++ b/classes/security.php
+@@ -111,12 +111,14 @@
+ 	}
+ 
+ 	/**
+-	 * Generic variable clean method
+-	 *
+-	 * @param  mixed   $var
+-	 * @param  mixed   $filters
+-	 * @param  string  $type
+-	 * @return array|mixed
++	 * Apply filters in order, recursively processing arrays and array-like objects.
++	 * Objects implementing Sanitization handle filtering through their own sanitize() method.
++	 *
++	 * @param  mixed   $var      Value, array, or object to clean.
++	 * @param  mixed   $filters  Filter or list of filters; null uses the configuration identified by $type.
++	 * @param  string  $type     Configuration key for the default filters.
++	 * @return mixed Filtered value, or the object after calling sanitize().
++	 * @throws \Throwable If a filter or sanitize() throws.
+ 	 */
+ 	public static function clean($var, $filters = null, $type = 'security.input_filter')
+ 	{
+@@ -144,8 +146,10 @@
+ 
+ 			foreach ($filters as $filter)
+ 			{
+-				// is this filter a callable local function?
+-				if (is_string($filter) and is_callable('static::'.$filter))
++				// Resolve bare method names on the called class; qualified names use the callable branch.
++				if (is_string($filter)
++					and strpos($filter, '::') === false
++					and is_callable(array(get_called_class(), $filter)))
+ 				{
+ 					$var = static::$filter($var);
+ 				}
+@@ -187,11 +191,29 @@
+ 		return $value;
+ 	}
+ 
++	/**
++	 * Strip tags and NUL bytes and encode quotes, preserving keys when processing arrays.
++	 *
++	 * @param mixed $value Value to convert to a string, or an array to process recursively.
++	 * @return array|string|false Sanitized value; false for values that cannot be converted to strings.
++	 * @throws \Throwable If converting an object to a string throws.
++	 */
+ 	public static function strip_tags($value)
+ 	{
+ 		if ( ! is_array($value))
+ 		{
+-			$value = filter_var($value, FILTER_SANITIZE_STRING);
++			// Use filter_var coercion and preserve false for unsupported values.
++			$value = filter_var($value, FILTER_UNSAFE_RAW);
++			if ($value !== false)
++			{
++				// Encode quotes first so quotes inside tags do not affect the tag parser.
++				$value = str_replace(array('"', "'"), array('&#34;', '&#39;'), $value);
++
++				// Leave <! and <? intact; insert a disposable tag character after other < characters.
++				// This lets native strip_tags remove tags even when < was followed by whitespace.
++				$value = preg_replace('/<(?![!?])/', '<x', $value);
++				$value = \strip_tags($value);
++			}
+ 		}
+ 		else
+ 		{
+--- a/classes/validation.php
++++ b/classes/validation.php
+@@ -881,14 +881,20 @@
+ 	}
+ 
+ 	/**
+-	 * Validate IP using PHP's filter_var()
+-	 *
+-	 * @param   string  $val
+-	 * @param   string  ipv4|ipv6
+-	 * @return  bool
++	 * Validate an IPv4 or IPv6 address, optionally restricting the address type.
++	 *
++	 * @param   string  $val Value to validate; the required rule handles empty values.
++	 * @param   string|int|null $flag ipv4, ipv6, or filter_var flags; null allows either address type.
++	 * @return  bool True for an empty value or an address matching the requested restrictions.
+ 	 */
+ 	public function _validation_valid_ip($val, $flag = null)
+ 	{
++		// Normalize an omitted restriction before passing it to string functions.
++		if ($flag === null)
++		{
++			$flag = 0;
++		}
++
+ 		switch (strtolower($flag))
+ 		{
+ 			case 'ipv4':

@@ -1,0 +1,4 @@
+* text=auto eol=lf
+# Preserve patch context and verbatim upstream license bytes.
+*.patch -text -whitespace
+LICENSES/* -text -whitespace

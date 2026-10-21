@@ -1,0 +1,114 @@
+--- a/classes/model.php
++++ b/classes/model.php
+@@ -2447,6 +2447,14 @@
+ 	 * Implementation of ArrayAccess
+ 	 **************************************************************************/
+ 
++	/**
++	 * Set a model property or relation, returning false if an exception is caught.
++	 *
++	 * @param mixed $offset Property or relation name.
++	 * @param mixed $value Value to assign.
++	 * @return false|null False on a caught exception, or null on success.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetSet($offset, $value)
+ 	{
+ 		try
+@@ -2459,16 +2467,38 @@
+ 		}
+ 	}
+ 
++	/**
++	 * Check whether a model property, relation, EAV attribute or custom field exists.
++	 *
++	 * @param mixed $offset Property or relation name.
++	 * @return bool Whether the name exists, including properties with null values.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetExists($offset)
+ 	{
+ 		return $this->__isset($offset);
+ 	}
+ 
++	/**
++	 * Clear a model property or relation through the model's unset handler.
++	 *
++	 * @param mixed $offset Property or relation name.
++	 * @return void
++	 * @throws \Exception Propagates exceptions raised by the unset handler.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetUnset($offset)
+ 	{
+ 		$this->__unset($offset);
+ 	}
+ 
++	/**
++	 * Get a model property or relation, returning false if an exception is caught.
++	 *
++	 * @param mixed $offset Property or relation name.
++	 * @return mixed The value, or false on a caught exception.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function offsetGet($offset)
+ 	{
+ 		try
+@@ -2487,27 +2517,57 @@
+ 
+ 	protected $_iterable = array();
+ 
++	/**
++	 * Rebuild the iteration array from custom data, model properties and loaded relations.
++	 *
++	 * @return void
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function rewind()
+ 	{
+ 		$this->_iterable = array_merge($this->_custom_data, $this->_data, $this->_data_relations);
+ 		reset($this->_iterable);
+ 	}
+ 
++	/**
++	 * Return the value at the current iteration position.
++	 *
++	 * @return mixed The current value, or false when the position is invalid.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function current()
+ 	{
+ 		return current($this->_iterable);
+ 	}
+ 
++	/**
++	 * Return the key at the current iteration position.
++	 *
++	 * @return int|string|null The current key, or null when the position is invalid.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function key()
+ 	{
+ 		return key($this->_iterable);
+ 	}
+ 
++	/**
++	 * Advance the iteration position and return the next value.
++	 *
++	 * @return mixed The next value, or false when no next element exists.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function next()
+ 	{
+ 		return next($this->_iterable);
+ 	}
+ 
++	/**
++	 * Check whether the iteration position has a key.
++	 *
++	 * @return bool Whether the current position is valid.
++	 */
++	#[\ReturnTypeWillChange]
+ 	public function valid()
+ 	{
+ 		return key($this->_iterable) !== null;

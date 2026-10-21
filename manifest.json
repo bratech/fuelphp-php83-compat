@@ -1,0 +1,249 @@
+{
+  "schema": 1,
+  "release": "1.0.0",
+  "packages": {
+    "fuel/core": {
+      "required": true,
+      "variants": {
+        "1.8.2": {
+          "reference": "050c3147b1d889223701b63e22f60e90bf46cc1e",
+          "mode": "patch",
+          "patch": "patches/fuel-core.patch",
+          "patch_sha256": "60d4225e5731a06060d0b9cf00f2f9ef5e41a7baa0d780fb1915c2b620afff40",
+          "files": {
+            "classes/controller/rest.php": {
+              "before": "841c70e7b28111760591310b4c1cdcdcad7662a6d0929ae9dc5cd8f68206cbf6",
+              "after": "1e0a3456a4c6e150ca9433b3e818f6e5d0ac729daa0aa28fac5512996368128f"
+            },
+            "classes/cookie.php": {
+              "before": "f5eb25be74a20105e68a0688d95e3a934d8f8c32fd7045be47da48cb71bf43bb",
+              "after": "b764361ad6d287acf8e5fc8f4ed2fcb608788bc3be780980d41fecc4bdbbf93b"
+            },
+            "classes/crypt.php": {
+              "before": "2339a4df0d51a79d3aeb7f57f56950ab30e0d202d53469328521db265b09c1be",
+              "after": "aaec4a9ba77ca271856884f439046f884feff2122cee80301ec9e369a8b73291"
+            },
+            "classes/database/mysqli/cached.php": {
+              "before": "a46bbc51b763312ca3ba5910c373a307f16b74679ce353fd39122cf5e7c833ef",
+              "after": "02f2f26e4483a65af1ed18df6fe52de5e799acbb9621881c510b8b585ba7fc3c"
+            },
+            "classes/database/mysqli/connection.php": {
+              "before": "fe18721c1ee72823a58588a312dadd06c83a756780da60db88b790cd9e727f16",
+              "after": "ffe4aaef6ec5fd3cbd0159bbf7ad9774689192219ac28de39913c956228f5fd8"
+            },
+            "classes/database/mysqli/result.php": {
+              "before": "096f72d5230d4cf3a270720071ddd595789f4906eca38e6f11b2e451a041da84",
+              "after": "c6974defc53afa5c4a5f5a39d0af1ca1992648ac8d61e64507d5abcbccc990b8"
+            },
+            "classes/database/pdo/cached.php": {
+              "before": "35bc324421cedbbcf9292062d99257c05a70fba42a676b4613470c6055cd596b",
+              "after": "207ac75de2999062af11b5a739b413aa2ea8c6e04350fde1cc9c397ffd09945b"
+            },
+            "classes/database/pdo/connection.php": {
+              "before": "853070a3a7dbe895449a8289412602092018c368e6593ff88a58618955588d6c",
+              "after": "a9981e3673721f3e7454ca8c9e5d8559c00103e38d1180e68b3ae0a29756ba4d"
+            },
+            "classes/database/pdo/result.php": {
+              "before": "cfde952b93c7187d139af0027b63c669c9b8926a3d3a57e48bcb354b928119bd",
+              "after": "3169e9f5fd84b42f9962433dc03a4a3f85768a06e19517da9679f0e546d45f01"
+            },
+            "classes/database/query/builder.php": {
+              "before": "92172297efd816bd18f1fae303f7fc3e93891a6e22de89547326637b14e90b71",
+              "after": "23de5b725aa319c353e5b1c415cabea6fca4677309df996944f4130f8d830cbb"
+            },
+            "classes/database/result.php": {
+              "before": "5c80d696c26b26c6e84e8d46e83613994d58f8dd537f16ae57ada5c646b6c704",
+              "after": "f2ea059a7c6aa9eaeb4daa61694e6186d301cb52af53f198604a45c5fcede541"
+            },
+            "classes/date.php": {
+              "before": "9383375028c30bc605ae6172c31f0be8e94b06b973e572c1d907fd16def64555",
+              "after": "6f5c20968bab40f4e77b585a5f33780b8f78a9d0c4cf2a165a2954f0766c7c61"
+            },
+            "classes/errorhandler.php": {
+              "before": "56d17b1d59ebe665560012c24e9002710e343704ab15f8c6e872af0675e40038",
+              "after": "ee90822aceb84a5bd44b42b8c5287dfd14e2f2a9e4fea9f45928768739ecfaa2"
+            },
+            "classes/format.php": {
+              "before": "3620eb968e72d9d73e9c2d5221a12b81fd6fc602c590584bdc1f8b96572ab1af",
+              "after": "a85b4ccd063672e0a3383086c1f738b7d9dcc18565ce7e5969e631bbd04f50b2"
+            },
+            "classes/image/gd.php": {
+              "before": "e0b07e5d967f943696a5343a534696c9927ec90386d8e09cc8f277fe04f602a4",
+              "after": "2744e475591bee8f040387561beb870a53d80968415044b45db19f453670f6b9"
+            },
+            "classes/input/instance.php": {
+              "before": "5aa2aa2f848e901e27a9b4473cebd39358f2bad75616ac8411694d53d7452cf5",
+              "after": "16843e2d38e791947af72bc954f5b4bd8cd358f0a838cb5053aa8e20e613f5b5"
+            },
+            "classes/input.php": {
+              "before": "6773e202b04abbc0ecbe0262a295d7496a9652b862a88381556a578408345a07",
+              "after": "5ea0922ae9407c3d99c71ee28896d7558f5df7f326ff4af22e5be6b4be2b172c"
+            },
+            "classes/model/crud.php": {
+              "before": "0459d775f5fa968fd9daf2799b48c9b013b5ef39f81001bd354daa0552257470",
+              "after": "9500384973e39004c40c73b835f01155644b50d517d965813e264892e585a9c8"
+            },
+            "classes/request.php": {
+              "before": "7567aeeaf2f55f540b6d3b2922a53efcd1b4f2cded7e1db832b0aa567eb3cfe2",
+              "after": "c678565609571f6403aa5127db5a8bd3ab120c4fc9272a120bb42f1b6df6feb8"
+            },
+            "classes/security.php": {
+              "before": "b7af222be97a958a6fa1199ddb5ef7a38464b216536880ae7f94cfd9fee23617",
+              "after": "d2d3b1b65de007f3862edc34c114f2c996444ef3ddb9052ae3d0a7a039f2c93b"
+            },
+            "classes/validation.php": {
+              "before": "6f1514fd8b1c8936ffa469cdb300c40a61fd210cb2c8ed046b4fc161b599934e",
+              "after": "3b673867d4405987c6363a2275a36361d191461295114cac7a54c242696f3404"
+            }
+          }
+        }
+      }
+    },
+    "fuel/email": {
+      "required": false,
+      "variants": {
+        "1.8.2": {
+          "reference": "b7fb81332d373594c370f12706cd7108ca1d01be",
+          "mode": "patch",
+          "patch": "patches/fuel-email.patch",
+          "patch_sha256": "8e727455c0148d4c7b39b02cfa4b2fe9dd8427d028b560df6c095abd0253dc32",
+          "files": {
+            "classes/email/driver/smtp.php": {
+              "before": "55d2bc20e7c9d174c5f61b7309ecf4dc96fbe0394c3d56b1cc4885a8b5663fa1",
+              "after": "51c94a6b56cf17a960034bbcbaeb139a54307a49a3e9666ffbc09a25f3c35f84"
+            }
+          }
+        }
+      }
+    },
+    "fuel/oil": {
+      "required": false,
+      "variants": {
+        "1.8.2": {
+          "reference": "8d3685c592e7a5161d29fc7a03ed61dacdada595",
+          "mode": "patch",
+          "patch": "patches/fuel-oil.patch",
+          "patch_sha256": "15d413a39f4e200fd66132db016326cee5b5404e278e88199496cf60e6e5b480",
+          "files": {
+            "classes/console.php": {
+              "before": "26436bac3c9f51bf66fc5552a3e9f6cdf2997f3d625d0b2b49450ffd75175197",
+              "after": "105b7c045553e963154c4d93427a649012de3ec283a8dac121f05c73645fb0b5"
+            },
+            "classes/generate.php": {
+              "before": "32a24d929879392712325586d732a2b0aad96754956d712af3297d7886d25382",
+              "after": "e9579b711d1a84fc92c192cf9c7b2d497f14d8efa2fe4b8e30b5928203e4fea6"
+            },
+            "classes/refine.php": {
+              "before": "6ec1601119f8ddaed22c1c821acf8c54e44fc28879cf9a393023cc0aa4a5d8c6",
+              "after": "d4687480583ec506f4524d740a189415112e74771ff992eda3de2d2ed779b3d3"
+            }
+          }
+        }
+      }
+    },
+    "fuel/orm": {
+      "required": false,
+      "variants": {
+        "1.8.2": {
+          "reference": "70deb9fbc5f42c364036cb4c27f9e1185019e657",
+          "mode": "patch",
+          "patch": "patches/fuel-orm.patch",
+          "patch_sha256": "133879e2cb2c60eb5b6db25e8e95de1d3ea5398005eea93b9171bd760d37bf15",
+          "files": {
+            "classes/model.php": {
+              "before": "93720d8d230ed14287239677b4746273cb273573077279555ccfcefc62d58800",
+              "after": "28775a476aceffd60cf761a6231903de7cf10b5c58729b3e17f2525759e3b8e0"
+            }
+          }
+        }
+      }
+    },
+    "fuel/parser": {
+      "required": false,
+      "variants": {
+        "1.8.2": {
+          "reference": "1e4c52b60dec72a4df6d3757db74904ab7cda9ef",
+          "mode": "patch",
+          "patch": "patches/fuel-parser.patch",
+          "patch_sha256": "30c78ee22f05da899ba0dff23904139d995527bebc20b2c18a1e21eb5ab66caa",
+          "files": {
+            "classes/view/markdown.php": {
+              "before": "1df2aec320cd8e15c2b692222bf55ccd25117c6734c45ba50c0e3e4265bf00c5",
+              "after": "ac7d80af3f735a7db328d003ae3c42d9ce87b9e05df467eba0410181ff02f44a"
+            }
+          }
+        }
+      }
+    },
+    "fuelphp/upload": {
+      "required": false,
+      "variants": {
+        "2.0.6": {
+          "reference": "73b3abfa317c22d6b4d63588e9601c13623ea6f6",
+          "mode": "patch",
+          "patch": "patches/fuelphp-upload.patch",
+          "patch_sha256": "c5dcf11ae108b3fa755050a1d30d0f301fd4fbd7bfc5e91af3a0b8b562cddbca",
+          "files": {
+            "src/File.php": {
+              "before": "34c35554d9b845e9a51864b89a48b8764152e59922c9b05132752a56f88d2f4c",
+              "after": "de21a6428faa1e6ec27a0f24c87fefbe9651368f32d8d097af0e1d9415123ec0"
+            },
+            "src/Upload.php": {
+              "before": "acf2be7e58fc1d19e8297a90b9dbfbfdbc73033963b391ce1c378eff354ed415",
+              "after": "387a35a6b961f1f3fc9f8b3ba713022665a8d4b811b65250052bccc8bb17dc9a"
+            }
+          }
+        },
+        "2.0.10": {
+          "reference": "b8da14928c03dc36e85e292ceb33f703be2bb45f",
+          "mode": "upstream",
+          "patch": null,
+          "patch_sha256": null,
+          "files": {
+            "src/File.php": {
+              "before": "7b4f867e4eed108841f90c39a95dfa3305172803ca040fdd3f9b698e64a568d4",
+              "after": "7b4f867e4eed108841f90c39a95dfa3305172803ca040fdd3f9b698e64a568d4"
+            },
+            "src/FileError.php": {
+              "before": "340e5184b30c9c54a9b7d86aae99da5e94977c99e074d59cb18bf460edce0e1f",
+              "after": "340e5184b30c9c54a9b7d86aae99da5e94977c99e074d59cb18bf460edce0e1f"
+            },
+            "src/NoFilesException.php": {
+              "before": "f309719653a4703973548d9a0c315619cc3ddf68446354227b14f65c8e86335e",
+              "after": "f309719653a4703973548d9a0c315619cc3ddf68446354227b14f65c8e86335e"
+            },
+            "src/Providers/FuelServiceProvider.php": {
+              "before": "ecab09f972825fbb457a3a7885e2e5678c2f06c5cd670aaea2d45c6d703268e0",
+              "after": "ecab09f972825fbb457a3a7885e2e5678c2f06c5cd670aaea2d45c6d703268e0"
+            },
+            "src/Upload.php": {
+              "before": "3bf367538ff04743b1219f829c54a724c48f300d6b04fd27e13c4fbc8c6e322b",
+              "after": "3bf367538ff04743b1219f829c54a724c48f300d6b04fd27e13c4fbc8c6e322b"
+            }
+          }
+        }
+      }
+    },
+    "michelf/php-markdown": {
+      "required": false,
+      "variants": {
+        "1.7.0": {
+          "reference": "1f51cc520948f66cd2af8cbc45a5ee175e774220",
+          "mode": "patch",
+          "patch": "patches/michelf-php-markdown.patch",
+          "patch_sha256": "6d2cdd82d31251278b47f37620f6f0134c663111910aa6c8f5d3cd82a69070dd",
+          "files": {
+            "Michelf/Markdown.php": {
+              "before": "33753c3dfac309efd0aa6d018874480e267e3743b60d2cb6c151346fd63ea42a",
+              "after": "5b648cf86c4fbc0fe22f8d039f7ade7a298c8234a21bb674c115aff8a702e8ce"
+            },
+            "Michelf/MarkdownExtra.php": {
+              "before": "a10a2713a591c71a056b89610e489f3a471b5a4ddf839b436a5358d79c6220e4",
+              "after": "7bfbaaf107312fd88bc69621f0eac9680bdc3aed0d3e622c6e635bdb5e7c4fe7"
+            }
+          }
+        }
+      }
+    }
+  }
+}
