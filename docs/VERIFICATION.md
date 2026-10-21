@@ -13,6 +13,8 @@ The cumulative patch now changes 34 files across seven packages. Exported patche
 
 Distribution tests also passed on both PHP versions: Project 38 cases, Transaction 18 cases, the CLI scenarios and Composer metadata validation. Four local Composer configurations (standard/custom layout on each PHP) passed actual installation of 1.0.0, rejection of direct new-patch application without source changes, reversal by the 1.0.0 tool, update to the new package, repeated operations and clean installation. Standard layouts passed the associated HTTP/API regressions; custom layouts used Upload 2.0.10 with email absent. These pre-publication checks used a local Git VCS source and fixed local upstream ZIP fixtures.
 
+On 2026-10-22, Composer installed the exact version `1.0.1` from GitHub in all four PHP/layout configurations. Each selected tag commit `912425429330de59a2570178a2d8ec62349764cb`, with all 29 downloaded package files matching that tag. Actual 1.0.0 reversal, update, repeated apply/reverse, clean install hooks and associated regression tests passed. GitHub API authentication was used; upstream dependencies remained fixed local ZIP fixtures. The v1.0.0 tag was not changed.
+
 The following sections retain the historical 1.0.0 distribution results and describe the shared scope and exclusions. The 1.0.0 tag remains unchanged.
 
 ## Release 1.0.0 validation
