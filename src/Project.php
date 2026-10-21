@@ -40,11 +40,9 @@ final class Project
         $packageRoot = $this->directory($this->packageRoot);
         $manifest = $this->readJson($packageRoot.'/manifest.json');
         $this->validateManifest($manifest);
-        $composer = $this->readJson($root.'/composer.json');
-        if (array_key_exists('config', $composer) && !is_array($composer['config'])) {
-            throw new RuntimeException('composer.json config must be an object.');
-        }
-        $vendor = $composer['config']['vendor-dir'] ?? 'vendor';
+        $composer = $this->readJson($root.'/composer.json', ['config']);
+        $config = $composer['config'] ?? [];
+        $vendor = array_key_exists('vendor-dir', $config) ? $config['vendor-dir'] : 'vendor';
         if (!is_string($vendor) || $vendor === '') {
             throw new RuntimeException('composer.json vendor-dir must be a nonempty path.');
         }
@@ -266,7 +264,7 @@ final class Project
         return $path === $root || strpos($path, rtrim($root, '/').'/') === 0;
     }
 
-    private function readJson(string $path): array
+    private function readJson(string $path, array $objectFields = []): array
     {
         $resolved = $this->resolvePath($path, '/');
         if (!is_file($resolved)) {
@@ -276,11 +274,17 @@ final class Project
         if ($contents === false) {
             throw new RuntimeException('Cannot read metadata: '.$resolved);
         }
-        $data = json_decode($contents, true);
-        if (!is_array($data) || json_last_error() !== JSON_ERROR_NONE || substr(ltrim($contents), 0, 1) !== '{') {
+        $data = json_decode($contents);
+        if (!$data instanceof \stdClass || json_last_error() !== JSON_ERROR_NONE) {
             throw new RuntimeException('Invalid JSON metadata: '.$resolved);
         }
-        return $data;
+        // Preserve the distinction between empty objects and lists until field shapes are checked.
+        foreach ($objectFields as $field) {
+            if (property_exists($data, $field) && !$data->{$field} instanceof \stdClass) {
+                throw new RuntimeException('Metadata field '.$field.' must be an object: '.$resolved);
+            }
+        }
+        return json_decode($contents, true);
     }
 
     private function validateManifest(array $manifest): void

@@ -141,6 +141,30 @@ class ConcurrentChangeTransaction extends Transaction
     }
 }
 
+class ChangedUnselectedPackageTransaction extends Transaction
+{
+    private $calls = 0;
+    public $externalPath;
+    public $externalContent;
+
+    /**
+     * Change a package excluded from staging while the first selected file is written.
+     *
+     * @param string $path Absolute source file selected by the transaction.
+     * @param string $content Replacement or rollback bytes.
+     * @param int $mode Original permission bits.
+     * @return void
+     * @throws RuntimeException If the normal replacement fails.
+     */
+    protected function replaceFile(string $path, string $content, int $mode): void
+    {
+        if (++$this->calls === 1) {
+            file_put_contents($this->externalPath, $this->externalContent);
+        }
+        parent::replaceFile($path, $content, $mode);
+    }
+}
+
 function txRunTests(): void
 {
     $tests = [];
@@ -315,6 +339,31 @@ function txRunTests(): void
                 putenv($value === false ? $name : $name . '=' . $value);
             }
         }
+    };
+    $tests['apply rejects reverted unselected package at final inspection'] = function ($root, $bundle) {
+        $email = $root . '/components/email/email.txt';
+        file_put_contents($email, "after\n");
+        $transaction = new ChangedUnselectedPackageTransaction(new Project($root, $bundle), $bundle);
+        $transaction->externalPath = $email;
+        $transaction->externalContent = "before\n";
+        txFails(function () use ($transaction) {
+            $transaction->run('apply');
+        }, 'Final');
+        txAssert(file_get_contents($root . '/components/core/a.txt') === "before\n", 'Failed apply did not roll back its own files.');
+        txAssert(file_get_contents($email) === "before\n", 'Failed apply overwrote an external package change.');
+    };
+    $tests['reverse rejects applied unselected package at final inspection'] = function ($root, $bundle) {
+        file_put_contents($root . '/components/core/a.txt', "after\n");
+        file_put_contents($root . '/components/core/nested/b.txt', "after\n");
+        $email = $root . '/components/email/email.txt';
+        $transaction = new ChangedUnselectedPackageTransaction(new Project($root, $bundle), $bundle);
+        $transaction->externalPath = $email;
+        $transaction->externalContent = "after\n";
+        txFails(function () use ($transaction) {
+            $transaction->run('reverse');
+        }, 'Final');
+        txAssert(file_get_contents($root . '/components/core/a.txt') === "after\n", 'Failed reverse did not roll back its own files.');
+        txAssert(file_get_contents($email) === "after\n", 'Failed reverse overwrote an external package change.');
     };
     foreach ($tests as $name => $test) {
         [$base, $root, $bundle] = txFixture();

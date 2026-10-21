@@ -92,9 +92,11 @@ class Transaction
                 }
                 $result = $this->project->inspect();
                 $this->assertReport($result);
-                foreach ($selected as $name => $package) {
-                    $expected = $direction === 'apply' ? 'patched' : 'unpatched';
-                    if ($result['packages'][$name]['state'] !== $expected) {
+                // Recheck the requested state across every package, including those
+                // initially skipped because they already had the requested state.
+                $expected = $direction === 'apply' ? 'patched' : 'unpatched';
+                foreach ($result['packages'] as $name => $package) {
+                    if (!in_array($package['state'], [$expected, 'upstream', 'not_installed'], true)) {
                         throw new RuntimeException('Final source verification failed for ' . $name);
                     }
                 }

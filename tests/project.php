@@ -311,6 +311,24 @@ $tests['null Composer configuration is rejected'] = function ($root, $package) {
     projectThrows(function () use ($root, $package) { (new Project($root, $package))->inspect(); }, 'A present config must be an object.');
 };
 
+$tests['null vendor directory is rejected'] = function ($root, $package) {
+    rename($root.'/deps', $root.'/vendor');
+    projectWriteJson($root.'/composer.json', ['config' => ['vendor-dir' => null]]);
+    projectThrows(function () use ($root, $package) { (new Project($root, $package))->inspect(); }, 'Explicit null vendor-dir must not fall back to vendor.');
+};
+$tests['Composer configuration lists are rejected'] = function ($root, $package) {
+    rename($root.'/deps', $root.'/vendor');
+    foreach ([[], ['unexpected-list-element']] as $config) {
+        projectWriteJson($root.'/composer.json', ['config' => $config]);
+        projectThrows(function () use ($root, $package) { (new Project($root, $package))->inspect(); }, 'JSON lists must not be accepted as config objects.');
+    }
+};
+$tests['empty Composer configuration object keeps default vendor directory'] = function ($root, $package) {
+    rename($root.'/deps', $root.'/vendor');
+    file_put_contents($root.'/composer.json', '{"config":{}}');
+    projectAssert('unpatched', projectState($root, $package), 'An empty config object must preserve the default vendor directory.');
+};
+
 $failed = 0;
 foreach ($tests as $name => $test) {
     $base = sys_get_temp_dir().'/fuelphp-compat-project-'.bin2hex(random_bytes(6));
