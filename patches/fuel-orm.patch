@@ -1,6 +1,82 @@
 --- a/classes/model.php
 +++ b/classes/model.php
-@@ -2447,6 +2447,14 @@
+@@ -1356,9 +1356,10 @@
+ 	 *     null = use default config,
+ 	 *     bool = force/prevent cascade,
+ 	 *     array cascades only the relations that are in the array
+-     *
+-     * @return bool
+-     */
++	 * @param  bool  $use_transaction  Wrap the operation in a database transaction
++	 * @return bool
++	 * @throws \Throwable  Persistence or observer failure, after cleanup
++	 */
+ 	public function save($cascade = null, $use_transaction = false)
+ 	{
+ 		if ($this->frozen())
+@@ -1440,8 +1441,10 @@
+ 
+ 			$use_transaction and $db->commit_transaction();
+ 		}
+-		catch (\Exception $e)
+-		{
++		catch (\Throwable $e)
++		{
++			// Relation callbacks can fail while this model is frozen.
++			$this->unfreeze();
+ 			$use_transaction and $db->rollback_transaction();
+ 			throw $e;
+ 		}
+@@ -1592,9 +1595,9 @@
+      *     null = use default config,
+      *     bool = force/prevent cascade,
+      *     array cascades only the relations that are in the array
+-     * @param bool $use_transaction
++     * @param bool $use_transaction Wrap the operation in a database transaction
+      *
+-     * @throws \Exception
++     * @throws \Throwable Persistence or observer failure, after cleanup
+      *
+      * @return  Model  this instance as a new object without primary key(s)
+      */
+@@ -1678,8 +1681,10 @@
+ 
+ 			$use_transaction and $db->commit_transaction();
+ 		}
+-		catch (\Exception $e)
+-		{
++		catch (\Throwable $e)
++		{
++			// Relation callbacks can fail while this model is frozen.
++			$this->unfreeze();
+ 			$use_transaction and $db->rollback_transaction();
+ 			throw $e;
+ 		}
+@@ -1753,9 +1758,11 @@
+ 	}
+ 
+ 	/**
+-	 * Calls all observers for the current event
+-	 *
+-	 * @param  string
++	 * Calls all observers for the current event and unfreezes the model on failure.
++	 *
++	 * @param  string  $event  Observer event name
++	 * @return void
++	 * @throws \Throwable  The observer failure is propagated to the caller
+ 	 */
+ 	public function observe($event)
+ 	{
+@@ -1783,7 +1790,7 @@
+ 				{
+ 					call_user_func(array($observer, 'orm_notify'), $this, $event);
+ 				}
+-				catch (\Exception $e)
++				catch (\Throwable $e)
+ 				{
+ 					// Unfreeze before failing
+ 					$this->unfreeze();
+@@ -2447,6 +2454,14 @@
  	 * Implementation of ArrayAccess
  	 **************************************************************************/
  
@@ -15,7 +91,7 @@
  	public function offsetSet($offset, $value)
  	{
  		try
-@@ -2459,16 +2467,38 @@
+@@ -2459,16 +2474,38 @@
  		}
  	}
  
@@ -54,7 +130,7 @@
  	public function offsetGet($offset)
  	{
  		try
-@@ -2487,27 +2517,57 @@
+@@ -2487,27 +2524,57 @@
  
  	protected $_iterable = array();
  

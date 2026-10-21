@@ -2,6 +2,19 @@
 
 These notes apply to the package versions and exact sources in [manifest.json](../manifest.json). Review them against the application's formats, stored objects, subclass overrides and error handling before deployment. [Verification scope](VERIFICATION.md) records what was tested.
 
+
+## Failure cleanup in release 1.0.1
+
+ORM save/delete and observer failures now run rollback/unfreeze cleanup for Error as well as Exception. Transaction use remains opt-in; nested rollback retains the existing whole-transaction scope. Database rollback does not restore a model's in-memory values, new-object flag or caches. Do not assume a failed model instance can be reused without reloading it.
+
+Request, Presenter and View restore their caller context on the tested failure paths, including a null active Request and failures in request-completion events. Presenter creation accepts a request without a module. PHP View cleanup preserves caller buffers; Smarty owns its own buffers and Fuel no longer closes an already-cleaned caller buffer.
+
+Filtering failures release changed sanitization state. Failed rendering and sending preserve the original error when output/sanitization cleanup or SMTP QUIT also fails. Secondary cleanup errors are not separately logged by this change. If rendering succeeds but sanitization cleanup fails, the cleanup error still propagates. Other payloads are released where possible.
+
+PHP cannot remove a buffer created without the removable flag. The cleanup loop stops rather than looping indefinitely or replacing the original error. A custom object whose unsanitize operation fails may remain sanitized. These cases do not guarantee complete state restoration.
+
+Application catch conditions and input validation still need review. There is no blanket replacement of Exception catches with Throwable and no change to business-error fallback values. See [remaining known failures](VERIFICATION.md#release-101-cleanup-verification).
+
 ## Runtime requirements
 
 ICU and `ext-intl` are mandatory in both Web and CLI PHP. No non-ICU fallback is provided. The underlying patch tests used Linux/glibc, PHP 7.4.33 and 8.3.24, and ICU 67.1. Other operating systems and ICU versions may have different locale/calendar data; retest the application's date output after changing them.

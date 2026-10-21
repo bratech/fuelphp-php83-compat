@@ -4,7 +4,10 @@
 
 `bratech/fuelphp-php83-compat` は、FuelPHP 1.8.2と指定の依存ライブラリに互換パッチを適用するパッケージです。PHP製CLIがインストール済みバージョン、参照コミット、対象ファイルのSHA-256を検査してから適用・逆適用します。互換対応セットのバージョンは、FuelPHP本体とは独立して管理します。
 
-**互換対応セットの版：1.0.0。** Gitタグ`v1.0.0`をComposerのバージョン指定`1.0.0`で取得します。この版は互換対応セットのもので、FuelPHP本体の版は1.8.2のままです。
+**互換対応セットの版：1.0.1。** Gitタグ`v1.0.1`をComposerのバージョン指定`1.0.1`で取得します。この版は互換対応セットのもので、FuelPHP本体の版は1.8.2のままです。
+
+
+1.0.1ではORM、Request／Presenter、View／Smarty、SMTPの障害時の後始末を修正しました。**1.0.0適用済みの場合は、パッケージを更新する前に1.0.0のツールでreverseしてください。** [更新手順](OPERATIONS.md#upgrading-from-100-to-101)と、残るProfiler・最終エラーハンドラーの問題を含む[検証範囲](VERIFICATION.md#release-101-cleanup-verification)を確認してください。
 
 ## 必須条件
 
@@ -18,11 +21,11 @@ ICUとPHP拡張 `ext-intl` は必須です。アプリケーションを実行�
 
 | パッケージ | バージョン | 処理 |
 | --- | --- | --- |
-| `fuel/core` | 1.8.2 | 必須。21ファイルに適用 |
+| `fuel/core` | 1.8.2 | 必須。23ファイルに適用 |
 | `fuel/email` | 1.8.2 | 導入済みなら1ファイルに適用 |
 | `fuel/oil` | 1.8.2 | 導入済みなら3ファイルに適用 |
 | `fuel/orm` | 1.8.2 | 導入済みなら1ファイルに適用 |
-| `fuel/parser` | 1.8.2 | 導入済みなら1ファイルに適用 |
+| `fuel/parser` | 1.8.2 | 導入済みなら2ファイルに適用 |
 | `fuelphp/upload` | 2.0.6 | 導入済みなら2ファイルに適用 |
 | `fuelphp/upload` | 2.0.10 | 公式ソースを検査。追加パッチは不要 |
 | `michelf/php-markdown` | 1.7.0 | 導入済みなら2ファイルに適用 |
@@ -46,7 +49,7 @@ Upload 2.0.10の `upstream` は、検査したUploadソースに追加パッチ�
     }
   ],
   "require": {
-    "bratech/fuelphp-php83-compat": "1.0.0",
+    "bratech/fuelphp-php83-compat": "1.0.1",
     "ext-intl": "*"
   },
   "scripts": {

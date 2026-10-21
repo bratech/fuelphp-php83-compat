@@ -4,7 +4,9 @@
 
 `bratech/fuelphp-php83-compat` distributes compatibility patches and a PHP CLI for selected FuelPHP 1.8.2 dependencies. It checks the installed version, source reference and file SHA-256 hashes before applying or reversing changes. The compatibility release number is independent of FuelPHP's version.
 
-**Compatibility release: 1.0.0.** Use the `v1.0.0` Git tag through Composer with the exact version requirement `1.0.0`. This version belongs to the compatibility set; FuelPHP remains 1.8.2.
+**Compatibility release: 1.0.1.** Use the `v1.0.1` Git tag through Composer with the exact version requirement `1.0.1`. This version belongs to the compatibility set; FuelPHP remains 1.8.2.
+
+Release 1.0.1 fixes failure cleanup in ORM, Request/Presenter, View/Smarty and SMTP. Existing 1.0.0 installations must be reversed with the **1.0.0 tool before updating**; see the [upgrade commands](docs/OPERATIONS.md#upgrading-from-100-to-101). Remaining profiler and final-error-handler limitations are listed in [verification](docs/VERIFICATION.md#release-101-cleanup-verification).
 
 ## Requirements
 
@@ -21,11 +23,11 @@ The PHP constraint covers the 7.4 and 8.3 series; PHP 8.0–8.2 and 8.4+ are not
 
 | Package | Version | Handling |
 | --- | --- | --- |
-| `fuel/core` | 1.8.2 | Required; patches 21 files |
+| `fuel/core` | 1.8.2 | Required; patches 23 files |
 | `fuel/email` | 1.8.2 | Patches 1 file when installed |
 | `fuel/oil` | 1.8.2 | Patches 3 files when installed |
 | `fuel/orm` | 1.8.2 | Patches 1 file when installed |
-| `fuel/parser` | 1.8.2 | Patches 1 file when installed |
+| `fuel/parser` | 1.8.2 | Patches 2 files when installed |
 | `fuelphp/upload` | 2.0.6 | Patches 2 files when installed |
 | `fuelphp/upload` | 2.0.10 | Checks known official sources; applies no patch |
 | `michelf/php-markdown` | 1.7.0 | Patches 2 files when installed |
@@ -47,7 +49,7 @@ Merge the following entries into the application's root `composer.json`. Keep ex
     }
   ],
   "require": {
-    "bratech/fuelphp-php83-compat": "1.0.0",
+    "bratech/fuelphp-php83-compat": "1.0.1",
     "ext-intl": "*"
   },
   "scripts": {

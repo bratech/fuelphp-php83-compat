@@ -1,6 +1,6 @@
 # Installation, updates and recovery
 
-This document describes compatibility release 1.0.0. Commands assume the application's root directory and Composer's default binary path. Use the actual binary path and `--root=path` when your layout differs.
+This document describes compatibility release 1.0.1. Commands assume the application's root directory and Composer's default binary path. Use the actual binary path and `--root=path` when your layout differs.
 
 ## Before changing dependencies
 
@@ -94,6 +94,30 @@ To roll back an upgrade, reverse with the new tool while it is still present, ve
 If replacement fails, the tool attempts to restore files already changed in that operation. A restoration failure remains an error; preserve the backup/work area and the paths reported by the CLI. Keep the application stopped, save the diagnostics, and compare every target against the appropriate manifest before deciding how to recover. The private `.fuelphp-compat-work-<hex>` directory contains backups and `recovery.json`, which records target paths, backup paths and modes. Successful operations or successful rollback remove this work directory; failed rollback retains it. Do not delete recovery files merely to make another invocation run, and do not unlink a live `.fuelphp-compat.lock`.
 
 Abrupt process termination, host failure or storage failure can leave a partial deployment. Use a known deployment backup or a clean dependency install from the saved lock and then apply the matching compatibility release. Reinspect with `status` and `check` before resuming execution. The lock prevents overlapping tool operations; it does not make multi-file replacement crash-atomic.
+
+## Upgrading from 1.0.0 to 1.0.1
+
+Keep the application stopped throughout the following sequence, including the unpatched interval. Back up the current deployment and lock first. These commands use the default binary path; substitute the existing project's binary path for a custom vendor/bin-dir.
+
+```sh
+# Run these with the installed 1.0.0 package still present.
+php vendor/bin/fuelphp-compat check --json
+php vendor/bin/fuelphp-compat reverse
+php vendor/bin/fuelphp-compat status --json
+
+# Verify unpatched/upstream/not_installed states before changing Composer requirements.
+composer require bratech/fuelphp-php83-compat:1.0.1 --no-update --no-scripts
+composer update bratech/fuelphp-php83-compat --no-interaction --no-scripts
+php vendor/bin/fuelphp-compat apply
+php vendor/bin/fuelphp-compat check --json
+composer check-platform-reqs
+```
+
+Check each command's exit status and stop on failure; a pasted list of shell commands does not itself stop execution. The first check must report release 1.0.0 and the final check must report 1.0.1. After old-version reversal, patchable packages must be `unpatched`. Review the lock diff, run the application's tests, and only then resume application processes.
+
+The new tool deliberately rejects the old patched hashes. Updating the package first removes access to its matching old manifest; do not work around that rejection by editing hashes or forcing the new patch. Restore the old package from the recorded lock in a controlled copy if that order was already reversed. Retain both old code and data backups until the upgrade is accepted.
+
+The short unpatched interval is not permission to run Oil, workers or the application. This upgrade does not require clearing sessions merely because reversal is used: it returns to patched code before any data is read. Removing patches permanently or running unpatched code has the separate storage restrictions below.
 
 ## Model_Crud data when removing patches
 

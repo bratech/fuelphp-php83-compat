@@ -1996,6 +1996,64 @@
  		if (isset($data['_is_new']))
  		{
  			$this->is_new = $data['_is_new'];
+--- a/classes/presenter.php
++++ b/classes/presenter.php
+@@ -36,7 +36,7 @@
+ 	public static function forge($presenter, $method = 'view', $auto_filter = null, $view = null)
+ 	{
+ 		// determine the presenter namespace from the current request context
+-		$namespace = \Request::active() ? ucfirst(\Request::active()->module) : '';
++		$namespace = \Request::active() ? ucfirst(\Request::active()->module ?? '') : '';
+ 
+ 		// create the list of possible class prefixes
+ 		$prefixes = array(static::$ns_prefix, $namespace.'\\');
+@@ -318,7 +318,10 @@
+ 	}
+ 
+ 	/**
+-	 * Add variables through method and after() and create template as a string
++	 * Add variables through method and after() and render in the creation context.
++	 *
++	 * @return string Rendered view
++	 * @throws \Throwable Presenter or view failure, after restoring the caller's request
+ 	 */
+ 	public function render()
+ 	{
+@@ -328,18 +331,22 @@
+ 			\Request::active($this->_active_request);
+ 		}
+ 
+-		$this->before();
+-		$this->{$this->_method}();
+-		$this->after();
+-
+-		$return = $this->_view->render();
+-
+-		if (class_exists('Request', false))
+-		{
+-			\Request::active($current_request);
+-		}
+-
+-		return $return;
++		try
++		{
++			$this->before();
++			$this->{$this->_method}();
++			$this->after();
++
++			return $this->_view->render();
++		}
++		finally
++		{
++			// The caller can have no active request, so restore null as well.
++			if (class_exists('Request', false))
++			{
++				\Request::active($current_request);
++			}
++		}
+ 	}
+ 
+ 	/**
 --- a/classes/request.php
 +++ b/classes/request.php
 @@ -181,6 +181,12 @@
@@ -2011,6 +2069,71 @@
  	/**
  	 * @var  string  $method  request method
  	 */
+@@ -371,7 +377,7 @@
+ 	 *
+ 	 * @param   array|null  $method_params  An array of parameters to pass to the method being executed
+ 	 * @return  Request  This request object
+-	 * @throws  \Exception
++	 * @throws  \Throwable  Controller or event failure, after restoring the request context
+ 	 * @throws  \FuelException
+ 	 * @throws  \HttpNotFoundException
+ 	 */
+@@ -495,33 +501,31 @@
+ 
+ 			// restore the language setting
+ 			\Config::set('language', $current_language);
+-		}
+-		catch (\Exception $e)
+-		{
++
++			// Get the controller's output
++			if ($response instanceof Response)
++			{
++				$this->response = $response;
++			}
++			else
++			{
++				throw new \FuelException(get_class($this->controller_instance).'::'.$method.'() or the controller after() method must return a Response object.');
++			}
++
++			// fire any request finished events
++			\Event::instance()->has_events('request_finished') and \Event::instance()->trigger('request_finished', '', 'none');
++
++			if (\Fuel::$profiling)
++			{
++				\Profiler::mark(__METHOD__.': End of '.$this->uri->get());
++			}
++		}
++		catch (\Throwable $e)
++		{
++			// Restore the request context even when response handling fails.
+ 			static::reset_request();
+-
+-			// restore the language setting
+ 			\Config::set('language', $current_language);
+-
+ 			throw $e;
+-		}
+-
+-		// Get the controller's output
+-		if ($response instanceof Response)
+-		{
+-			$this->response = $response;
+-		}
+-		else
+-		{
+-			throw new \FuelException(get_class($this->controller_instance).'::'.$method.'() or the controller after() method must return a Response object.');
+-		}
+-
+-		// fire any request finished events
+-		\Event::instance()->has_events('request_finished') and \Event::instance()->trigger('request_finished', '', 'none');
+-
+-		if (\Fuel::$profiling)
+-		{
+-			\Profiler::mark(__METHOD__.': End of '.$this->uri->get());
+ 		}
+ 
+ 		static::reset_request();
 --- a/classes/security.php
 +++ b/classes/security.php
 @@ -111,12 +111,14 @@
@@ -2106,3 +2229,304 @@
  		switch (strtolower($flag))
  		{
  			case 'ipv4':
+--- a/classes/view.php
++++ b/classes/view.php
+@@ -240,8 +240,9 @@
+ 	 *
+ 	 *     $output = $this->process_file();
+ 	 *
+-	 * @param   bool  $file_override  File override
++	 * @param   string|false  $file_override  Alternate filename, or false for the configured view
+ 	 * @return  string
++	 * @throws  \Throwable  Template failure after output and data cleanup
+ 	 */
+ 	protected function process_file($file_override = false)
+ 	{
+@@ -249,7 +250,8 @@
+ 		{
+ 			extract($__data, EXTR_REFS);
+ 
+-			// Capture the view output
++			// Capture only the buffers opened inside this view.
++			$__buffer_level = ob_get_level();
+ 			ob_start();
+ 
+ 			try
+@@ -257,10 +259,31 @@
+ 				// Load the view within the current scope
+ 				include $__file_name;
+ 			}
+-			catch (\Exception $e)
+-			{
+-				// Delete the output buffer
+-				ob_end_clean();
++			catch (\Throwable $e)
++			{
++				// Nested template buffers belong to this render, not its caller.
++				while (ob_get_level() > $__buffer_level)
++				{
++					$__status = ob_get_status();
++					if ( ! ($__status['flags'] & PHP_OUTPUT_HANDLER_REMOVABLE))
++					{
++						break;
++					}
++
++					$__level = ob_get_level();
++					try
++					{
++						ob_end_clean();
++					}
++					catch (\Throwable $__cleanup_error)
++					{
++						// A failing output handler must not replace the template error.
++					}
++					if (ob_get_level() >= $__level)
++					{
++						break;
++					}
++				}
+ 
+ 				// Re-throw the exception
+ 				throw $e;
+@@ -270,14 +293,31 @@
+ 			return ob_get_clean();
+ 		};
+ 
+-		// import and process the view file
+-		$result = $clean_room($file_override ?: $this->file_name, $data = $this->get_data());
+-
+-		// disable sanitization on objects that support it
+-		$this->unsanitize($data);
+-
+-		// return the result
+-		return $result;
++		$data = $this->get_data();
++		try
++		{
++			return $clean_room($file_override ?: $this->file_name, $data);
++		}
++		catch (\Throwable $e)
++		{
++			$failure = $e;
++			throw $e;
++		}
++		finally
++		{
++			try
++			{
++				$this->unsanitize($data);
++			}
++			catch (\Throwable $cleanup_error)
++			{
++				// Report cleanup-only failures, but preserve a template failure.
++				if ( ! isset($failure))
++				{
++					throw $cleanup_error;
++				}
++			}
++		}
+ 	}
+ 
+ 	/**
+@@ -286,13 +326,34 @@
+ 	 *
+ 	 *     $data = $this->get_data();
+ 	 *
+-	 * @param   string  $scope  local/glocal/all
+-	 * @return  array   view data
++	 * @param   string  $scope  local/global/all
++	 * @return  array   Filtered view data; the caller must unsanitize it after use
++	 * @throws  \Throwable  Filter failure after attempting to restore changed sanitization states
+ 	 */
+ 	protected function get_data($scope = 'all')
+ 	{
++		// Remember states before filtering, including objects inside filtered arrays.
++		$states = new \SplObjectStorage();
++		$remember = function ($value) use (&$remember, $states)
++		{
++			if ($value instanceof \Sanitization)
++			{
++				if ( ! $states->contains($value))
++				{
++					$states[$value] = $value->sanitized();
++				}
++			}
++			elseif (is_array($value) or ($value instanceof \Traversable and $value instanceof \ArrayAccess))
++			{
++				foreach ($value as $item)
++				{
++					$remember($item);
++				}
++			}
++		};
++
+ 		$filter_closures = $this->filter_closures;
+-		$clean_it = function ($data, $rules, $auto_filter) use ($filter_closures)
++		$clean_it = function ($data, $rules, $auto_filter) use ($filter_closures, $remember)
+ 		{
+ 			foreach ($data as $key => &$value)
+ 			{
+@@ -304,6 +365,7 @@
+ 					{
+ 						$value = $value();
+ 					}
++					$remember($value);
+ 					$value = \Security::clean($value, null, 'security.output_filter');
+ 				}
+ 			}
+@@ -313,14 +375,36 @@
+ 
+ 		$data = array();
+ 
+-		if ( ! empty($this->data)  and ($scope === 'all' or $scope === 'local'))
+-		{
+-			$data += $clean_it($this->data, $this->local_filter, $this->auto_filter);
+-		}
+-
+-		if ( ! empty(static::$global_data)  and ($scope === 'all' or $scope === 'global'))
+-		{
+-			$data += $clean_it(static::$global_data, static::$global_filter, $this->auto_filter);
++		try
++		{
++			if ( ! empty($this->data)  and ($scope === 'all' or $scope === 'local'))
++			{
++				$data += $clean_it($this->data, $this->local_filter, $this->auto_filter);
++			}
++
++			if ( ! empty(static::$global_data)  and ($scope === 'all' or $scope === 'global'))
++			{
++				$data += $clean_it(static::$global_data, static::$global_filter, $this->auto_filter);
++			}
++		}
++		catch (\Throwable $e)
++		{
++			// Filtering can fail before process_file receives its data to clean up.
++			foreach ($states as $object)
++			{
++				try
++				{
++					if ( ! $states[$object] and $object->sanitized())
++					{
++						$object->unsanitize();
++					}
++				}
++				catch (\Throwable $cleanup_error)
++				{
++					// Continue releasing other objects and preserve the filter failure.
++				}
++			}
++			throw $e;
+ 		}
+ 
+ 		return $data;
+@@ -329,8 +413,9 @@
+ 	/**
+ 	 * disable sanitation on any objects in the data that support it
+ 	 *
+-	 * @param   mixed
+-	 * @return  mixed
++	 * @param   mixed  $var  Filtered data whose objects must leave sanitization mode
++	 * @return  mixed  Data after cleanup
++	 * @throws  \Throwable  First cleanup failure, after attempting the remaining values
+ 	 */
+ 	protected function unsanitize($var)
+ 	{
+@@ -346,7 +431,19 @@
+ 			// recurse on array values
+ 			foreach($var as $key => $value)
+ 			{
+-				$var[$key] = $this->unsanitize($value);
++				try
++				{
++					$var[$key] = $this->unsanitize($value);
++				}
++				catch (\Throwable $e)
++				{
++					// Release the remaining objects before reporting the first failure.
++					isset($failure) or $failure = $e;
++				}
++			}
++			if (isset($failure))
++			{
++				throw $failure;
+ 			}
+ 		}
+ 
+@@ -643,15 +740,16 @@
+ 	 * [!!] Global variables with the same key name as local variables will be
+ 	 * overwritten by the local variable.
+ 	 *
+-	 * @param    $file  string  view filename
++	 * @param    string|null  $file  View filename override
+ 	 * @return   string
+-	 * @throws   \FuelException
++	 * @throws   \Throwable  Filename or template failure after context restoration
+ 	 * @uses     static::capture
+ 	 */
+ 	public function render($file = null)
+ 	{
+ 		// reactivate the correct request
+-		if (class_exists('Request', false))
++		$has_request = class_exists('Request', false);
++		if ($has_request)
+ 		{
+ 			$current_request = \Request::active();
+ 			\Request::active($this->active_request);
+@@ -664,31 +762,32 @@
+ 			\Config::set('language', $this->active_language);
+ 		}
+ 
+-		// override the view filename if needed
+-		if ($file !== null)
+-		{
+-			$this->set_filename($file);
+-		}
+-
+-		// and make sure we have one
+-		if (empty($this->file_name))
+-		{
+-			throw new \FuelException('You must set the file to use within your view before rendering');
+-		}
+-
+-		// combine local and global data and capture the output
+-		$return = $this->process_file();
+-
+-		// restore the current language setting
+-		$this->active_language and \Config::set('language', $current_language);
+-
+-		// and the active request class
+-		if (isset($current_request))
+-		{
+-			\Request::active($current_request);
+-		}
+-
+-		return $return;
++		try
++		{
++			// override the view filename if needed
++			if ($file !== null)
++			{
++				$this->set_filename($file);
++			}
++
++			// and make sure we have one
++			if (empty($this->file_name))
++			{
++				throw new \FuelException('You must set the file to use within your view before rendering');
++			}
++
++			// combine local and global data and capture the output
++			return $this->process_file();
++		}
++		finally
++		{
++			// Restore context on template, filename and parser failures alike.
++			$this->active_language and \Config::set('language', $current_language);
++			if ($has_request)
++			{
++				\Request::active($current_request);
++			}
++		}
+ 	}
+ 
+ }

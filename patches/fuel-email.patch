@@ -1,6 +1,63 @@
 --- a/classes/email/driver/smtp.php
 +++ b/classes/email/driver/smtp.php
-@@ -315,26 +315,32 @@
+@@ -43,6 +43,7 @@
+ 	 * Initiates the sending process.
+ 	 *
+ 	 * @return  bool    success boolean
++	 * @throws  \Throwable Original send failure after the connection is released
+ 	 */
+ 	protected function _send()
+ 	{
+@@ -52,27 +53,31 @@
+ 			return $this->_send_email();
+ 		}
+ 
+-		// something failed
+-		catch (\Exception $e)
+-		{
+-			// disconnect if needed
+-			if ($this->smtp_connection)
+-			{
+-				if ($e instanceOf SmtpTimeoutException)
++		catch (\Throwable $e)
++		{
++			try
++			{
++				// A timed-out connection cannot complete another SMTP command.
++				if (is_resource($this->smtp_connection) and ! ($e instanceof SmtpTimeoutException))
+ 				{
+-					// simply close the connection
+-					fclose($this->smtp_connection);
+-					$this->smtp_connection = null;
+-				}
+-				else
+-				{
+-					// proper close, with a QUIT
+ 					$this->smtp_disconnect();
+ 				}
+ 			}
+-
+-			// rethrow the exception
+-			throw $e;
++			finally
++			{
++				// QUIT can fail too. Detach and close the resource before rethrowing.
++				$connection = $this->smtp_connection;
++				$this->smtp_connection = null;
++				try
++				{
++					is_resource($connection) and fclose($connection);
++				}
++				finally
++				{
++					// Cleanup failures must not replace the original send failure.
++					throw $e;
++				}
++			}
+ 		}
+ 	}
+ 
+@@ -315,26 +320,32 @@
  	}
  
  	/**

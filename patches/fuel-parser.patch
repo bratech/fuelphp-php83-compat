@@ -18,3 +18,60 @@
  	{
  		if ($_type == 'php')
  		{
+--- a/classes/view/smarty.php
++++ b/classes/view/smarty.php
+@@ -18,26 +18,45 @@
+ {
+ 	protected static $_parser;
+ 
++	/**
++	 * Render with Smarty, which owns and cleans up its output buffers.
++	 *
++	 * @param string|false $file_override Alternate filename, or false for the configured view
++	 * @return string Rendered template
++	 * @throws \Throwable Parser failure after filtered objects are released
++	 */
+ 	protected function process_file($file_override = false)
+ 	{
+ 		$file = $file_override ?: $this->file_name;
++		$data = $this->get_data();
+ 
+ 		try
+ 		{
+-			// Smarty doesn't support method chaining
++			// Smarty does not support method chaining.
+ 			$parser = static::parser();
+-			$parser->assign($data = $this->get_data());
+-			$result = $parser->fetch($file);
++			$parser->assign($data);
++			return $parser->fetch($file);
+ 		}
+-		catch (\Exception $e)
++		catch (\Throwable $e)
+ 		{
+-			// Delete the output buffer & re-throw the exception
+-			ob_end_clean();
++			$failure = $e;
+ 			throw $e;
+ 		}
+-
+-		$this->unsanitize($data);
+-		return $result;
++		finally
++		{
++			// Smarty owns its buffers; Fuel only releases the filtered objects.
++			try
++			{
++				$this->unsanitize($data);
++			}
++			catch (\Throwable $cleanup_error)
++			{
++				if ( ! isset($failure))
++				{
++					throw $cleanup_error;
++				}
++			}
++		}
+ 	}
+ 
+ 	public $extension = 'smarty';

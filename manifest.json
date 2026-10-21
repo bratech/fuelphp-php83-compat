@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "release": "1.0.0",
+  "release": "1.0.1",
   "packages": {
     "fuel/core": {
       "required": true,
@@ -9,7 +9,7 @@
           "reference": "050c3147b1d889223701b63e22f60e90bf46cc1e",
           "mode": "patch",
           "patch": "patches/fuel-core.patch",
-          "patch_sha256": "60d4225e5731a06060d0b9cf00f2f9ef5e41a7baa0d780fb1915c2b620afff40",
+          "patch_sha256": "0c6cc1ec234b8ac555e9e1f0f3cefd6e26042627f8772a1c3b93da2b5e082508",
           "files": {
             "classes/controller/rest.php": {
               "before": "841c70e7b28111760591310b4c1cdcdcad7662a6d0929ae9dc5cd8f68206cbf6",
@@ -83,9 +83,13 @@
               "before": "0459d775f5fa968fd9daf2799b48c9b013b5ef39f81001bd354daa0552257470",
               "after": "9500384973e39004c40c73b835f01155644b50d517d965813e264892e585a9c8"
             },
+            "classes/presenter.php": {
+              "before": "33d4ab51a7985f9754d9a54071501740f1d3c458af78167aaf94308a4e3c5cfd",
+              "after": "f0ab3e884d3e7656cc9924223d8126661a41b05918a52917692b21d29f3c97fc"
+            },
             "classes/request.php": {
               "before": "7567aeeaf2f55f540b6d3b2922a53efcd1b4f2cded7e1db832b0aa567eb3cfe2",
-              "after": "c678565609571f6403aa5127db5a8bd3ab120c4fc9272a120bb42f1b6df6feb8"
+              "after": "fdb3ea30c33759d8c10d393aedd26ec3bd4a94e8492931d49c308f5f2a9d9063"
             },
             "classes/security.php": {
               "before": "b7af222be97a958a6fa1199ddb5ef7a38464b216536880ae7f94cfd9fee23617",
@@ -94,6 +98,10 @@
             "classes/validation.php": {
               "before": "6f1514fd8b1c8936ffa469cdb300c40a61fd210cb2c8ed046b4fc161b599934e",
               "after": "3b673867d4405987c6363a2275a36361d191461295114cac7a54c242696f3404"
+            },
+            "classes/view.php": {
+              "before": "5905caeccb8969ada6bcd5c9c12f8421ffdfdb9bd4f70b00f7f696d11ad637c0",
+              "after": "283b085c9019a9a20199df22757092c367be899247d46d4cbd3e6fe1e2e1affa"
             }
           }
         }
@@ -106,11 +114,11 @@
           "reference": "b7fb81332d373594c370f12706cd7108ca1d01be",
           "mode": "patch",
           "patch": "patches/fuel-email.patch",
-          "patch_sha256": "8e727455c0148d4c7b39b02cfa4b2fe9dd8427d028b560df6c095abd0253dc32",
+          "patch_sha256": "437cd0039df7b70fe933fbe7ce7391d410bb9306051cfde3973f95b3da4efccf",
           "files": {
             "classes/email/driver/smtp.php": {
               "before": "55d2bc20e7c9d174c5f61b7309ecf4dc96fbe0394c3d56b1cc4885a8b5663fa1",
-              "after": "51c94a6b56cf17a960034bbcbaeb139a54307a49a3e9666ffbc09a25f3c35f84"
+              "after": "cdfd2d84f9d3bc4a400d719a0ff3c8a01f1a2ad2e456b3e6145a080d8d702f08"
             }
           }
         }
@@ -148,11 +156,11 @@
           "reference": "70deb9fbc5f42c364036cb4c27f9e1185019e657",
           "mode": "patch",
           "patch": "patches/fuel-orm.patch",
-          "patch_sha256": "133879e2cb2c60eb5b6db25e8e95de1d3ea5398005eea93b9171bd760d37bf15",
+          "patch_sha256": "852d603e7e3657450d56b26cae67f4fa568d3ce5059a6a8f526c8ef7e7e0fff8",
           "files": {
             "classes/model.php": {
               "before": "93720d8d230ed14287239677b4746273cb273573077279555ccfcefc62d58800",
-              "after": "28775a476aceffd60cf761a6231903de7cf10b5c58729b3e17f2525759e3b8e0"
+              "after": "1b7a6bd87d824b20df172a92d015a1c8457d7fea10390ea773265e7d7fcf91c0"
             }
           }
         }
@@ -165,11 +173,15 @@
           "reference": "1e4c52b60dec72a4df6d3757db74904ab7cda9ef",
           "mode": "patch",
           "patch": "patches/fuel-parser.patch",
-          "patch_sha256": "30c78ee22f05da899ba0dff23904139d995527bebc20b2c18a1e21eb5ab66caa",
+          "patch_sha256": "61ec19ab88f769b94bc2d4b7a0b6a416100606dcaf3322f19912c91e608c6055",
           "files": {
             "classes/view/markdown.php": {
               "before": "1df2aec320cd8e15c2b692222bf55ccd25117c6734c45ba50c0e3e4265bf00c5",
               "after": "ac7d80af3f735a7db328d003ae3c42d9ce87b9e05df467eba0410181ff02f44a"
+            },
+            "classes/view/smarty.php": {
+              "before": "5452aba281bfb9846a7346578269f58219c834aba4334e9b0889330700dc72fe",
+              "after": "5bc77dff7cd5465a3582a0b5e699df9ea244391d1295c23a5f6494795226924e"
             }
           }
         }

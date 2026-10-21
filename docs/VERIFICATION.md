@@ -1,6 +1,19 @@
 # Verification scope
 
-## Release validation
+
+## Release 1.0.1 cleanup verification
+
+On 2026-10-22, the corrected ORM, Request/Presenter, View/Smarty and SMTP paths passed 109 checks on each PHP version (218 total). The complete exception comparison recorded 531 cases: 463 passed and 68 failed. Of those failures, 59 belong to the unpatched PHP 7.4 comparison; five remain on patched PHP 7.4 and four on patched PHP 8.3. These are retained findings, not an all-green framework claim. Seventy-nine previously failing cases passed after the fixes, with no regression among previously passing checks.
+
+Remaining patched failures are PDO profiler cleanup, the final handler when its log destination is unusable, and PHP 7.4 shutdown handling. The unusable-log production fixture also produced duplicate error output and exposed details with `display_errors=1`. Normal tested HTTP/Oil fault responses passed the new output-count checks. This release does not fix every error-handler path.
+
+The six PHP/database configurations below were rerun twice each against the final patch, with all twelve regression runs passing. PHP/repeat comparisons, common database results, selected upstream tests, sanitizer checks and storage-migration tests passed. A separate twenty-run check covered both Upload versions, direct API, Security, date and SMTP behavior. Dependencies were not upgraded and no new dependency audit was claimed.
+
+The cumulative patch now changes 34 files across seven packages. Exported patches reproduced all 34 source hashes; actual apply, repeated apply, reverse, reapply and rejection of modified sources passed. Independent review identified buffer-loop progress, partial filtering cleanup and cleanup-error preservation issues; failing reproductions were added and the fixes passed on both PHP versions.
+
+The following sections retain the historical 1.0.0 distribution results and describe the shared scope and exclusions. The 1.0.0 tag remains unchanged.
+
+## Release 1.0.0 validation
 
 This document records the tests used to prepare compatibility release 1.0.0. The distribution checks and underlying patch tests below passed on 2026-10-21, including GitHub VCS retrieval using `dev-main`. These branch-based results were recorded before tagging `v1.0.0`.
 
