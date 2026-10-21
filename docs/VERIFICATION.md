@@ -18,6 +18,12 @@ The standard-layout projects ran the existing 20 HTTP and 20 direct-API cases, d
 
 Independent review found two issues that were reproduced and fixed before the final local installation pass: malformed Composer configuration could fall back to default paths, and final transaction checks covered only selected packages. Invalid configuration now fails, and final verification covers every installed target. Failures still restore only files changed by that transaction.
 
+## Tagged release installation
+
+On 2026-10-22, Composer 2.8.1 installed the exact requirement `1.0.0` from GitHub in all four PHP/layout configurations described above. Each run selected `v1.0.0` at commit `f8ab52febee269be2af78930b16e0ef0f16adc65`; all 28 downloaded package files matched that tag. Apply/check, repeated apply/reverse, clean installation hooks, Oil and the associated regression tests passed. The release CLI suites also passed on both PHP versions before tagging.
+
+The first unauthenticated attempt passed both PHP 7.4 scenarios, then exhausted GitHub's anonymous API quota before PHP 8.3 retrieval. All four configurations were subsequently rerun successfully with API authentication. Upstream dependencies remained fixed local ZIP fixtures; this was not a new dependency audit. The tag has not been moved. [GitHub Release 1.0.0](https://github.com/bratech/fuelphp-php83-compat/releases/tag/v1.0.0) records the published release.
+
 ## Underlying patch tests
 
 The recorded environment was Linux/glibc, PHP 7.4.33 and 8.3.24, and ICU 67.1. The following six PHP/database combinations ran twice each, for twelve complete runs:
