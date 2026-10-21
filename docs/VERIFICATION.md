@@ -1,8 +1,8 @@
 # Verification scope
 
-## Release status
+## Release validation
 
-Compatibility release 1.0.0 is UNRELEASED. The distribution checks and underlying patch tests below passed on 2026-10-21. GitHub VCS retrieval using `dev-main` has also passed. No release tag has been created; installation from a published release tag remains unverified.
+This document records the tests used to prepare compatibility release 1.0.0. The distribution checks and underlying patch tests below passed on 2026-10-21, including GitHub VCS retrieval using `dev-main`. These branch-based results were recorded before tagging `v1.0.0`.
 
 ## Distribution checks
 

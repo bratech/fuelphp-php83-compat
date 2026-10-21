@@ -1,6 +1,6 @@
 # Installation, updates and recovery
 
-This document describes compatibility release 1.0.0, currently UNRELEASED. Commands assume the application's root directory and Composer's default binary path. Use the actual binary path and `--root=path` when your layout differs.
+This document describes compatibility release 1.0.0. Commands assume the application's root directory and Composer's default binary path. Use the actual binary path and `--root=path` when your layout differs.
 
 ## Before changing dependencies
 
@@ -21,7 +21,7 @@ Ignoring a recovery directory does not authorize deleting it after a failure. Re
 
 ## First installation and Composer hooks
 
-After publication, add the VCS repository and exact release requirement shown in the [README](../README.md#installation-after-publication). Preserve the application's existing scripts. In `post-install-cmd`, place compatibility `apply` and `check` before an existing `oil r install` and other Fuel-loading tasks. Add `apply` and `check` to `post-update-cmd` without adding installation tasks that were not already intended to run on updates.
+Add the VCS repository and exact release requirement shown in the [README](../README.md#installation). Preserve the application's existing scripts. In `post-install-cmd`, place compatibility `apply` and `check` before an existing `oil r install` and other Fuel-loading tasks. Add `apply` and `check` to `post-update-cmd` without adding installation tasks that were not already intended to run on updates.
 
 Composer runs the root project's scripts. Scripts defined only in an installed library do not supply this integration. If deployment disables scripts, its build stage must run the commands explicitly:
 
