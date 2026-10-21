@@ -4,7 +4,7 @@
 
 `bratech/fuelphp-php83-compat` distributes compatibility patches and a PHP CLI for selected FuelPHP 1.8.2 dependencies. It checks the installed version, source reference and file SHA-256 hashes before applying or reversing changes. The compatibility release number is independent of FuelPHP's version.
 
-**Release 1.0.0 is UNRELEASED.** No release tag has been published. The GitHub installation example below is for use after publication; installation from GitHub and the release tag have not yet been verified.
+**Release 1.0.0 is UNRELEASED.** The `main` branch is available on GitHub, and Composer installation using `dev-main` has been verified on PHP 7.4 and 8.3. No release tag has been published. The `1.0.0` installation example below is for use after that tag is published; installation from a release tag remains unverified.
 
 ## Requirements
 

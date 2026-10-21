@@ -2,7 +2,7 @@
 
 ## Release status
 
-Compatibility release 1.0.0 is UNRELEASED. The distribution checks and underlying patch tests below passed locally on 2026-10-21. GitHub VCS retrieval and installation from a published release tag remain unverified before publication.
+Compatibility release 1.0.0 is UNRELEASED. The distribution checks and underlying patch tests below passed on 2026-10-21. GitHub VCS retrieval using `dev-main` has also passed. No release tag has been created; installation from a published release tag remains unverified.
 
 ## Distribution checks
 
@@ -10,7 +10,7 @@ On both PHP 7.4.33 and 8.3.24, the inspector passed 38 cases, the transaction ha
 
 All seven generated patches were applied to the verified originals. The resulting 31 files matched the existing patched-source SHA-256 hashes. The five official Upload 2.0.10 source files were checked separately without a patch.
 
-Composer 2.8.1 installation was tested in four disposable projects: both PHP versions with standard paths and Upload 2.0.6, and both versions with changed vendor/installer paths, Upload 2.0.10 and no email package. Composer fetched this package from its local Git repository; upstream dependencies came from local ZIP archives of the fixed sources. This confirms local VCS and installation behavior, not GitHub availability or fresh upstream downloads.
+Composer 2.8.1 installation was tested in four disposable projects: both PHP versions with standard paths and Upload 2.0.6, and both versions with changed vendor/installer paths, Upload 2.0.10 and no email package. Composer fetched this package from its local Git repository; upstream dependencies came from local ZIP archives of the fixed sources. That initial pass checked local VCS behavior. After the public branch was pushed, the same four configurations passed using `https://github.com/bratech/fuelphp-php83-compat` as the VCS repository and `dev-main` as the requirement. Composer downloaded this package from GitHub without credentials; all 27 package files matched commit `6590c49d72ada57d9f12a3b7a66c686507794af9`. The published documentation was then updated to record these results; implementation and patches were unchanged. Upstream dependencies still came from the fixed local ZIP archives, so this was not a fresh-download test of every upstream dependency or a new dependency audit.
 
 Each project exercised script-disabled update, status/check, apply, repeated apply, reverse and repeated reverse, followed by a clean install from its lock. The install hooks ran apply and check before the existing Oil install task. The alternate layout also passed Oil startup and 28 Upload checks per PHP version.
 
