@@ -1,5 +1,13 @@
 # Verification scope
 
+## Release 1.0.2 image resize verification
+
+The image resize fix passed 13 cases on each PHP/driver combination: PHP 7.4 and 8.3 with GD and ImageMagick. GD results matched the pre-fix PHP 7.4 baseline. The tests treat warnings and deprecations as failures and cover omitted dimensions, numeric strings, percentages, aspect ratio, stretching, padding, portrait input, a 2400-by-1600 image and rejection of two omitted dimensions.
+
+The MySQLi full suites and cross-PHP comparison passed. Distribution CLI tests passed on both PHP versions; actual patch application, reapplication, reversal and source-hash verification also passed. The core patch now covers 24 files; the cumulative set covers 35 files across seven packages.
+
+The separate 25-case GD suite retained two existing failures, `mask_file` and `mask_taller_than_source`, on both PHP versions. All results matched the pre-fix driver comparison. These mask defects are outside this fix. Imagick and every database configuration were not rerun. Production application integration was not performed.
+
 
 ## Release 1.0.1 cleanup verification
 
