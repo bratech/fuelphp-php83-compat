@@ -1538,6 +1538,23 @@
  					$item = $enclosure.str_replace($enclosure, $escape.$enclosure, $item).$enclosure;
  				}
  				return $item;
+--- a/classes/image/driver.php
++++ b/classes/image/driver.php
+@@ -248,11 +248,12 @@
+ 	{
+ 		if ($height == null or $width == null)
+ 		{
+-			if ($height == null and substr($width, -1) == '%')
++			// Cast only for the suffix checks; preserve null for dimension inference and validation.
++			if ($height == null and substr((string) $width, -1) == '%')
+ 			{
+ 				$height = $width;
+ 			}
+-			elseif (substr($height, -1) == '%' and $width == null)
++			elseif (substr((string) $height, -1) == '%' and $width == null)
+ 			{
+ 				$width = $height;
+ 			}
 --- a/classes/image/gd.php
 +++ b/classes/image/gd.php
 @@ -80,13 +80,19 @@
