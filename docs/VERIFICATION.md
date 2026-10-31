@@ -8,6 +8,8 @@ The MySQLi full suites and cross-PHP comparison passed. Distribution CLI tests p
 
 The separate 25-case GD suite retained two existing failures, `mask_file` and `mask_taller_than_source`, on both PHP versions. All results matched the pre-fix driver comparison. These mask defects are outside this fix. Imagick and every database configuration were not rerun. Production application integration was not performed.
 
+On 2026-10-31, all four PHP/layout configurations passed both local VCS installation and GitHub retrieval of the exact `1.0.2` tag. Each verified the 1.0.1-to-1.0.2 reversal/update sequence, repeated patch operations, clean installation hooks and all 13 resize cases. The downloaded package files matched tag commit `4d87390` in full. Upstream dependencies remained fixed local ZIP fixtures; this was not a new dependency audit or a fresh-download test of every upstream package.
+
 
 ## Release 1.0.1 cleanup verification
 
