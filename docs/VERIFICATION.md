@@ -4,6 +4,8 @@
 
 The new `fuel-oil.patch` applied to the recorded original `classes/console.php` and reproduced the manifest's patched hash; the result passed `php -l`. The Project (38), Transaction (18) and CLI scenario suites passed on PHP 7.4.34 and 8.3.35. No automated test exercises the console loop, and the other packages' patches were not retested. See the [release notes](releases/1.0.3.md).
 
+On 2026-11-20, one application project (PHP 7.4 platform, standard layout) installed the exact version `1.0.3` from GitHub with Composer 2.7.1: tag `v1.0.3` at commit `ecc0485d9a0bfeb8cf890313b7e266f1fec58649`. The 1.0.2 tool reversed its patches (all packages `unpatched` or `upstream`), then Composer updated the package, and `apply` and `check` reported 1.0.3 with every package `patched` or `upstream`. These steps ran on PHP 8.3.35; `oil console` with standard input redirected from `/dev/null` was then run on PHP 7.4.33 in the same project and exited with status 0 after printing the prompt once. The four-configuration matrix of earlier releases was not repeated.
+
 ## Release 1.0.2 image resize verification
 
 The image resize fix passed 13 cases on each PHP/driver combination: PHP 7.4 and 8.3 with GD and ImageMagick. GD results matched the pre-fix PHP 7.4 baseline. The tests treat warnings and deprecations as failures and cover omitted dimensions, numeric strings, percentages, aspect ratio, stretching, padding, portrait input, a 2400-by-1600 image and rejection of two omitted dimensions.
