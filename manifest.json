@@ -135,11 +135,11 @@
           "reference": "8d3685c592e7a5161d29fc7a03ed61dacdada595",
           "mode": "patch",
           "patch": "patches/fuel-oil.patch",
-          "patch_sha256": "15d413a39f4e200fd66132db016326cee5b5404e278e88199496cf60e6e5b480",
+          "patch_sha256": "976a4738c21a0f39a08ab82cfe70aa46a428a121ffee46f6246416b90022d646",
           "files": {
             "classes/console.php": {
               "before": "26436bac3c9f51bf66fc5552a3e9f6cdf2997f3d625d0b2b49450ffd75175197",
-              "after": "105b7c045553e963154c4d93427a649012de3ec283a8dac121f05c73645fb0b5"
+              "after": "f8c5af6e049dbd8c7e9ca54c07bb89b30f66487bbe598be5fb26bd143dcd766c"
             },
             "classes/generate.php": {
               "before": "32a24d929879392712325586d732a2b0aad96754956d712af3297d7886d25382",

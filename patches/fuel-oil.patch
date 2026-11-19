@@ -1,6 +1,22 @@
 --- a/classes/console.php
 +++ b/classes/console.php
-@@ -173,7 +173,7 @@
+@@ -83,7 +83,14 @@ HELP;
+ 				readline_completion_function(array(__CLASS__, 'tab_complete'));
+ 			}
+ 
+-			if ( ! $__line = rtrim(trim(trim(\Cli::input('>>> ')), PHP_EOL), ';'))
++			$__input = \Cli::input('>>> ');
++			if ($__input === false)
++			{
++				// End of input (for example a closed terminal): leave instead of prompting forever.
++				break;
++			}
++
++			if ( ! $__line = rtrim(trim(trim($__input), PHP_EOL), ';'))
+ 			{
+ 				continue;
+ 			}
+@@ -173,7 +180,7 @@ HELP;
  
  		for ($i = 0; $i < strlen($line); $i++)
  		{
