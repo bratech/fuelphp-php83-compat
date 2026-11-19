@@ -4,9 +4,9 @@
 
 `bratech/fuelphp-php83-compat` distributes compatibility patches and a PHP CLI for selected FuelPHP 1.8.2 dependencies. It checks the installed version, source reference and file SHA-256 hashes before applying or reversing changes. The compatibility release number is independent of FuelPHP's version.
 
-**Compatibility release: 1.0.2.** Use the `v1.0.2` Git tag through Composer with the exact version requirement `1.0.2`. This version belongs to the compatibility set; FuelPHP remains 1.8.2.
+**Compatibility release: 1.0.3.** Use the `v1.0.3` Git tag through Composer with the exact version requirement `1.0.3`. This version belongs to the compatibility set; FuelPHP remains 1.8.2.
 
-Release 1.0.2 fixes PHP 8.3 deprecation warnings when image resizing omits a dimension. Percentage checks cast their inputs without changing dimension inference or validation. Reverse existing patches with the **installed version's tool before updating**; see the [upgrade commands](docs/OPERATIONS.md#upgrading-from-101-to-102) and [release notes](docs/releases/1.0.2.md).
+Release 1.0.3 stops `oil console` when standard input ends. Previously a closed terminal left the console prompting forever at full CPU. Reverse existing patches with the **installed version's tool before updating**; see the [upgrade commands](docs/OPERATIONS.md#upgrading-from-102-to-103) and [release notes](docs/releases/1.0.3.md).
 
 ## Requirements
 
@@ -49,7 +49,7 @@ Merge the following entries into the application's root `composer.json`. Keep ex
     }
   ],
   "require": {
-    "bratech/fuelphp-php83-compat": "1.0.2",
+    "bratech/fuelphp-php83-compat": "1.0.3",
     "ext-intl": "*"
   },
   "scripts": {

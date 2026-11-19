@@ -1,5 +1,9 @@
 # Verification scope
 
+## Release 1.0.3 Oil console verification
+
+The new `fuel-oil.patch` applied to the recorded original `classes/console.php` and reproduced the manifest's patched hash; the result passed `php -l`. The Project (38), Transaction (18) and CLI scenario suites passed on PHP 7.4.34 and 8.3.35. No automated test exercises the console loop, and the other packages' patches were not retested. See the [release notes](releases/1.0.3.md).
+
 ## Release 1.0.2 image resize verification
 
 The image resize fix passed 13 cases on each PHP/driver combination: PHP 7.4 and 8.3 with GD and ImageMagick. GD results matched the pre-fix PHP 7.4 baseline. The tests treat warnings and deprecations as failures and cover omitted dimensions, numeric strings, percentages, aspect ratio, stretching, padding, portrait input, a 2400-by-1600 image and rejection of two omitted dimensions.

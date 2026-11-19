@@ -15,6 +15,10 @@ PHP cannot remove a buffer created without the removable flag. The cleanup loop 
 
 Application catch conditions and input validation still need review. There is no blanket replacement of Exception catches with Throwable and no change to business-error fallback values. See [remaining known failures](VERIFICATION.md#release-101-cleanup-verification).
 
+## Oil console at end of input in release 1.0.3
+
+`oil console` now exits when standard input ends (`Cli::input()` returns `false`), for example when its terminal closes or input is redirected from `/dev/null`. It previously kept prompting at full CPU. Interactive use is unchanged; scripts that relied on the console never ending after input ends must not depend on that.
+
 ## Runtime requirements
 
 ICU and `ext-intl` are mandatory in both Web and CLI PHP. No non-ICU fallback is provided. The underlying patch tests used Linux/glibc, PHP 7.4.33 and 8.3.24, and ICU 67.1. Other operating systems and ICU versions may have different locale/calendar data; retest the application's date output after changing them.
